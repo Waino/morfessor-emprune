@@ -106,13 +106,17 @@ class BaselineModel(object):
     def _check_integrity(self):
         """Check integrity of the model data structures"""
         failed = False
-        parents = collections.defaultdict(list)
         # Check constructions
         for construction in self._analyses.keys():
             node = self._analyses[construction]
             if node.count < 1:
                 _logger.critical("Non-positive count %s for construction %s",
                                  node.count, construction)
+                failed = True
+            if node.count < node.rcount:
+                _logger.critical("Total count %s lower than root count %s "
+                                 "for construction %s",
+                                 node.count, node.rcount, construction)
                 failed = True
             if not node.splitloc:
                 continue
@@ -129,7 +133,6 @@ class BaselineModel(object):
                         part, construction, self._analyses[part].count,
                         node.count)
                     failed = True
-                parents[part].append((construction, node.count))
         if failed:
             raise MorfessorException("Corrupted model")
 
@@ -1021,15 +1024,14 @@ class RestrictedBaseline(BaselineModel):
         self.allowed_boundaries = {}
 
     def _check_integrity(self):
-        """Check integrity of the model data structures"""
-        super(RestrictedBaseline, self)._check_integrity()
         failed = False
         parents = collections.defaultdict(list)
         # Check compounds
         for compound in self._compounds.keys():
             node = self._compounds[compound]
             if node.splitloc:
-                children = splitloc_to_segmentation(compound, node.splitloc)
+                children = splitloc_to_segmentation(compound,
+                                                    node.splitloc)
             else:
                 children = [compound]
             for part in children:
@@ -1046,6 +1048,30 @@ class RestrictedBaseline(BaselineModel):
                         node.count)
                     failed = True
                 parents[part].append((compound, node.count))
+        # Check constructions
+        for construction in self._analyses.keys():
+            node = self._analyses[construction]
+            if node.count < 1:
+                _logger.critical("Non-positive count %s for construction %s",
+                                 node.count, construction)
+                failed = True
+            if not node.splitloc:
+                continue
+            for part in splitloc_to_segmentation(construction,
+                                                 node.splitloc):
+                if not part in self._analyses:
+                    _logger.critical(
+                        "Subconstruction '%s' of '%s' not found",
+                        part, construction)
+                    failed = True
+                elif self._analyses[part].count < node.count:
+                    _logger.critical(
+                        ("Subconstruction '%s' has lower "
+                         "count than parent '%s': %s < %s"),
+                        part, construction, self._analyses[part].count,
+                        node.count)
+                    failed = True
+                parents[part].append((construction, node.count))
         # Check count sums
         for construction in parents.keys():
             node = self._analyses[construction]
