@@ -3,8 +3,9 @@
 import collections
 import logging
 import math
+import re
 
-from .utils import segmentation_to_splitloc
+from .utils import segmentation_to_splitloc, _progress
 
 _logger = logging.getLogger(__name__)
 
@@ -299,6 +300,155 @@ class FixedCorpusWeight(CorpusWeight):
     def update(self, model, _):
         model.set_corpus_coding_weight(self.weight)
         return False
+
+
+class AlignedTokenCountCorpusWeight(CorpusWeight):
+    """Class for using a sentence-aligned parallel bilingual corpus
+    to set the corpus weight in such a way that the number of
+    morphs in corpus of the language to be segmented
+    is as similar as possible to the number of tokens on the reference side.
+    """
+    re_token_sep = re.compile(r'\s+', re.UNICODE)
+    align_losses = ('abs', 'square', 'zeroone', 'tot')
+
+    def __init__(self,
+                 unsegmented_dev,
+                 reference_dev,
+                 threshold=0.01,
+                 loss='abs',
+                 linguistic_dev=None):
+        self.unsegmented_dev = list(self.tokenize(unsegmented_dev))
+        self.reference_counts = list(len(x) for x
+                                     in self.tokenize(reference_dev))
+        _logger.info('Total reference tokens {}'.format(
+            sum(self.reference_counts)))
+        self.threshold = threshold
+        self.align_loss_idx = self.align_losses.index(loss)
+        assert len(self.unsegmented_dev) == len(self.reference_counts)
+        self.previous_weight = None
+        self.previous_cost = None
+        self.previous_d = None
+        if linguistic_dev is not None:
+            self.linguistic_dev = list(self.tokenize(linguistic_dev))
+            assert len(self.linguistic_dev) == len(self.reference_counts)
+        else:
+            self.linguistic_dev = None
+
+
+    def update(self, model, epoch):
+        if epoch < 1:
+            # Can't use viterbi_segment before first epoch
+            return False
+        weight = model.get_corpus_coding_weight()
+        (cost, d) = self.evaluation(model)
+        if self.previous_cost is not None:
+            absdiff = abs(cost - self.previous_cost)
+            absthresh = self.previous_cost * self.threshold
+            if absdiff < absthresh:
+                _logger.info("Align cost delta {} is below threshold {}. "
+                    "Weight learning stopped".format(absdiff, absthresh))
+                return False
+        if self.previous_weight is None or cost < self.previous_cost:
+            # accept the previous step
+            self.previous_weight = weight
+            self.previous_cost = cost
+            self.previous_d = d
+            _logger.info("Accepting step to {}".format(weight))
+        else:
+            # revert the previous step
+            weight = self.previous_weight
+            _logger.info("Reverting weight to {}".format(weight))
+            model.set_corpus_coding_weight(weight)
+            cost = self.previous_cost
+            d = self.previous_d
+        # new step
+        return self.move_direction(model, d, epoch)
+
+    @classmethod
+    def tokenize(cls, lines):
+        for line in lines:
+            line = line.strip()
+            yield cls.re_token_sep.split(line)
+
+    def evaluation(self, model):
+        costs, d, _ = self.calculate_costs(model)
+        cost = costs[self.align_loss_idx]
+        return (cost, d)
+
+    def calculate_costs(self, model):
+        abs_cost = 0.0
+        sq_cost = 0.0
+        zeroone_cost = 0.0
+        tot_cost = 0.0
+        direction = 0
+        tot_tokens = 0
+        cache = {}
+        if self.linguistic_dev is not None:
+            self.morph_totals = collections.Counter()
+            self.morph_scores_pos = collections.Counter()
+            self.morph_scores_neg = collections.Counter()
+            linguistic_dev_iter = iter(self.linguistic_dev)
+        _logger.info('Segmenting aligned parallel corpus for weight learning')
+        for (tokens, ref) in zip(_progress(self.unsegmented_dev),
+                                 self.reference_counts):
+            segments = collections.Counter()
+            for w in tokens:
+                segments.update(self._cached_seg(model, cache, w))
+            segcount = sum(segments.values())
+            tot_tokens += segcount
+            diff = segcount - ref
+            if diff > 0:
+                d = 1
+            elif diff < 0:
+                d = -1
+            else:
+                d = 0
+            direction += d
+            abs_cost += abs(diff)
+            sq_cost += diff**2
+            if diff != 0:
+                zeroone_cost += 1
+            tot_cost += diff
+            if self.linguistic_dev is not None:
+                # also count morph-type-level scores
+                ling_morphs = collections.Counter(next(linguistic_dev_iter))
+                self.morph_totals.update(ling_morphs)
+                # Observe: - operator (as opposed to .subtract)
+                #   uses multiset semantics, 
+                #   and will not result in negative counts.
+                not_in_seg = ling_morphs - segments
+                in_seg = ling_morphs - not_in_seg
+                if diff > 0:
+                    # oversegmented
+                    for morph in ling_morphs:
+                        # strong plus if split in an overseg sentence
+                        self.morph_scores_pos[morph] += in_seg[morph]
+                        # weak plus if joined in an overseg sentence
+                        self.morph_scores_neg[morph] -= not_in_seg[morph]
+                elif diff < 0:
+                    # undersegmented
+                    for morph in ling_morphs:
+                        # strong minus if joined in an underseg sentence
+                        self.morph_scores_neg[morph] += not_in_seg[morph]
+                        # weak minus if split in an underseg sentence
+                        self.morph_scores_pos[morph] -= in_seg[morph]
+        tot_cost = abs(tot_cost)
+        costs = (abs_cost, sq_cost, zeroone_cost, tot_cost)
+        _logger.info('Align costs {}, direction {}, total tokens {}'.format(
+            costs, direction, tot_tokens))
+        return (costs, direction, tot_tokens)
+
+    def _cached_seg(self, model, cache, word):
+        if word not in cache:
+            try:
+                seg = model.segment(word)
+            except (KeyError, AttributeError):
+                # don't use viterbi_segment: the only unseen words should be
+                # unanalyzable words, which are not split anyhow
+                #seg = model.viterbi_segment(word)[0]
+                seg = [word]
+            cache[word] = seg
+        return cache[word]
 
 
 class AnnotationCorpusWeight(CorpusWeight):

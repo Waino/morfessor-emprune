@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import collections
 import heapq
 import logging
@@ -9,7 +10,7 @@ import re
 from .corpus import LexiconEncoding, CorpusEncoding, \
     AnnotatedCorpusEncoding, FixedCorpusWeight
 from .utils import segmentation_to_splitloc, splitloc_to_segmentation, \
-    _progress, constructions_to_str
+    _progress, constructions_to_str, _is_string
 from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
@@ -412,8 +413,11 @@ class BaselineModel(object):
         else:
             rcount, count, splitloc = 0, 0, 0
         newcount = count + dcount
+        # observe that this comparison will not work correctly if counts
+        # are floats rather than ints
         if newcount == 0:
-            del self._analyses[construction]
+            if construction in self._analyses:
+                del self._analyses[construction]
         else:
             self._analyses[construction] = ConstrNode(rcount, newcount,
                                                       splitloc)

@@ -10,7 +10,7 @@ import string
 from . import get_version
 from . import utils
 from .corpus import AnnotationCorpusWeight, MorphLengthCorpusWeight, \
-    NumMorphCorpusWeight, FixedCorpusWeight
+    NumMorphCorpusWeight, FixedCorpusWeight, AlignedTokenCountCorpusWeight
 from .baseline import BaselineModel, RestrictedBaseline
 from .exception import ArgumentException
 from .io import MorfessorIO
@@ -238,6 +238,19 @@ Interactive use (read corpus from user):
             help="tune the corpusweight to obtain the desired number of morph "
                  "types")
 
+    add_arg = parser.add_argument_group(
+        'Non-exlusive corpusweight tuning options').add_argument
+    add_arg('--aligned-reference', dest='alignref', default=None,
+            metavar='<file>',
+            help='FIXME')
+    add_arg('--aligned-to-segment', dest='alignseg', default=None,
+            metavar='<file>',
+            help='FIXME')
+    add_arg('--aligned-loss', dest="alignloss", type=str, default='abs',
+            metavar='<type>', choices=['abs', 'square', 'zeroone', 'tot'],
+            help="loss function for FIXME ('abs', 'square', 'zeroone' or"
+                 "'tot'; default '%(default)s')")
+
     # Options for semi-supervised model training
     add_arg = parser.add_argument_group(
         'semi-supervised training options').add_argument
@@ -406,6 +419,20 @@ def main(args):
         updater = NumMorphCorpusWeight(args.morphtypes, args.threshold)
         model.set_corpus_weight_updater(updater)
 
+    if args.alignref is not None:
+        if args.alignseg is None:
+            raise ArgumentException(
+                'If --aligned-reference is specified, '
+                'you must also specify --aligned-to-segment')
+        if args.alignloss not in AlignedTokenCountCorpusWeight.align_losses:
+            raise ArgumentException("unknown alignloss type '%s'" % args.alignloss)
+        updater = AlignedTokenCountCorpusWeight(
+            io._read_text_file(args.alignseg),
+            io._read_text_file(args.alignref),
+            args.threshold,
+            args.alignloss)
+        model.set_corpus_weight_updater(updater)
+
     start_corpus_weight = model.get_corpus_coding_weight()
 
     # Set frequency dampening function
@@ -519,8 +546,9 @@ def main(args):
             raise ArgumentException("unknown training mode '%s'"
                                     % args.trainmode)
         te = time.time()
-        _logger.info("Final cost: %s", c)
-        _logger.info("Training time: %.3fs", (te - ts))
+        _logger.info("Final cost: %s" % c)
+        _logger.info("Final corpus weight: %s" % model.get_corpus_coding_weight())
+        _logger.info("Training time: %.3fs" % (te - ts))
     else:
         _logger.warning("No training data files specified.")
 
