@@ -79,6 +79,8 @@ Example 2: ::
     kahvikilon
     kahvikoneemme
 
+.. _annotation-file-def:
+
 Annotation file
 ---------------
 An annotation file contains one compound and one or more annotations per
@@ -94,3 +96,6 @@ Example: ::
     kahvikakku kahvi kakku, kahvi kak ku
     kahvikilon kahvi kilon
     kahvikoneemme kahvi konee mme, kah vi ko nee mme
+
+Annotations are used for semi-supervised training [Kohonen2010]_ and
+restricting the unsupervised segmentations [Grönroos2016]_.

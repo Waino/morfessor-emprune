@@ -1,5 +1,5 @@
-Morfessor 2.0 (ORM variant) - Quick start
-=========================================
+Morfessor 2.0 - Quick start
+===========================
 
 
 Installation
@@ -41,15 +41,15 @@ Restricted Morfessor
 
 This branch includes the modifications to Morfessor that enable
 restricting segmentation points using a linguistic gold standard.
-Morfessor may then join some of the linguistic morphs,
-but can not split linguistic morphs into smaller parts.
+Morfessor may then join some of the linguistic morphs, but can not
+split linguistic morphs into smaller parts.
 
-The modifications have an impact on memory consumption.
-For this reason, we have not included them in the main branch at this time.
+The modifications have an impact on memory consumption. For this
+reason, we have not included them in the main branch at this time.
 
-To use the Restricted Morfessor,
-give the linguistic restrictions using ``--restricted-segmentation <file>``.
-The restrictions should be in the same format as Morfessor annotated data files:
+To use the Restricted Morfessor, give the linguistic restrictions
+using ``--restricted-segmentation <file>``. The restrictions should be
+in the same format as Morfessor annotated data files:
 
 Example: ::
 
@@ -73,8 +73,8 @@ An example command using omorfi-derived segmentation: ::
 Aligned token count tuning
 --------------------------
 
-In the paper [1], the corpus weight for Morfessor was tuned
-to balance the number of tokens between the source and segmented target language.
+In the paper [1], the corpus weight for Morfessor was tuned to balance
+the number of tokens between the source and segmented target language.
 
 Train a grid of models with different corpus weight parameters.
 Then evaluate the models with the command: ::
@@ -84,10 +84,11 @@ Then evaluate the models with the command: ::
         --aligned-to-segment parallel.fi \
         model.alpha*.seg
 
-[1]:
-Stig-Arne Grönroos, Sami Virpioja and Mikko Kurimo.
-Hybrid Morphological Segmentation for Phrase-Based Machine Translation.
-Proceedings of the First Conference on Machine Translation. Berlin, Germany, 2016.
+[1]: Stig-Arne Grönroos, Sami Virpioja and Mikko Kurimo.  Hybrid
+Morphological Segmentation for Phrase-Based Machine Translation.
+Proceedings of the First Conference on Machine Translation, pages
+289–295, Berlin, Germany, August 2016. Association for Computational
+Linguistics. Available on-line:
 http://www.statmt.org/wmt16/pdf/W16-2312.pdf
 
 Contact

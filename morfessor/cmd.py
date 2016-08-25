@@ -277,7 +277,7 @@ Interactive use (read corpus from user):
             metavar='<file>',
             help="load annotated data for restricted segmentation")
     add_arg('--restricted-relaxed', dest="relaxed", default=None,
-            metavar='<file>',
+            metavar='<int>,<int>,<int>,<int>',
             help=("relaxed restrictions with given context window lengths "
                   "(<left>,<right>,<begin>,<end>)"))
 

@@ -67,12 +67,17 @@ Training model options
 
 
 ``-a <algorithm>, --algorithm <algorithm>``
-    Algorithm to use for training:
+    Algorithm or other step to use for training:
 
+    flatten
+        Flatten the data structure as described in :ref:`flattening`
     recursive
         Recursive as descirbed in :ref:`recursive-training` **Default**
     viterbi
         Viterbi as described in :ref:`viterbi-training`
+
+    Repeat for sequential training with multiple algorithms, e.g.
+    "-a recursive -a flatten -a viterbi".
 
 ``-d <type>, --dampening <type>``
     Method for changing the compound counts in the input data. Options:
@@ -124,6 +129,27 @@ Training model options
 ``--viterbi-maxlen <int>``
     Maximum construction length in Viterbi training and
     segmentation (default 30)
+
+
+Options for weighting and annotated data
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``-w <float>, --corpusweight <float>``
+    Set corpus weight parameter (default 1.0). Sets the initial value
+    if other tuning options are used; see :ref:`corpusweight`
+
+``-A <file>, --annotations <file>``
+    Load annotated data for semi-supervised learning; see :ref:`semisupervised`
+``-W <float>, --annotationweight <float>``
+    Set corpus weight parameter for annotated data. If unset, the weight
+    is set to balance the number of tokens in annotated and unannotated
+    data sets
+
+``--restricted-segmentation <file>``
+    Load annotated data for restricted segmentation; see :ref:`restrictions`
+``--restricted-relaxed <int>,<int>,<int>,<int>``
+    Use relaxed restrictions with context window lengths for "left", "right",
+    "begin", and "end" positions
 
 
 Saving model
@@ -332,6 +358,18 @@ one split and running the algorithm recursively on the created constructions.
 In the end, the best split is selected and the training continues with the next
 compound.
 
+Recursive training follows :ref:`restrictions` only approximately.
+
+.. _`flattening`:
+
+Flattening the data structure
+-----------------------------
+Recursive training applies a hierarchical data structure for storing
+the constructions. After training, it may be useful to flatten this
+structure before :ref:`viterbi-training` or Viterbi segmentation.
+With :ref:`restrictions`, flattening is required prior to the Viterbi
+training to fully comply to the restrictions.
+
 .. _`viterbi-training`:
 
 Local Viterbi training
@@ -380,3 +418,33 @@ Morph length (``--morph-length``)
 Num morph types (``--num-morph-types``)
     The corpusweight is tuned so that there will be approximate the number of
     desired morph types in the lexicon
+
+.. _`semisupervised`:
+
+Semi-supervised training
+------------------------
+If correct segmentations are known for a particular set of compounds,
+they can be added to the likelihood function that the training algorithm
+is optimizing. The input should be in :ref:`annotation-file-def` format.
+
+The annotated and unannotated parts of the input data will have
+separate corpus weights. Tuning the weights are highly recommended.
+
+See [Kohonen2010]_ for more information.
+
+.. _`restrictions`:
+
+Restricted segmentation
+-----------------------
+Restricted segmentation is a way to use :ref:`annotation-file-def` 
+without actual semi-supervised training. For any word in the annotation
+file, the segmentation algorithm is restricted to boundaries specified
+by the annotation. If there are multiple annotations per word, the set
+of allowed boundaries is union over the annotation boundaries.
+
+It is recommended to first train using the recursive training
+algorithm, but switch over to local Viterbi training after a few
+iterations.  This can be done using the command line argument sequence
+``--algorithm recursive --algorithm flatten --algorithm viterbi``.
+
+See [Grönroos2016]_ for more information.
