@@ -578,7 +578,14 @@ class BaselineModel(object):
         """
         self._check_segment_only()
         _, _, splitloc = self._analyses[compound]
-        return list(self.cc.splitn(compound, splitloc)) if splitloc else [compound]
+        constructions = []
+        if splitloc:
+            for part in self.cc.splitn(compound, splitloc):
+                constructions += self.segment(part)
+        else:
+            constructions.append(compound)
+
+        return constructions
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     finish_threshold=0.005, max_epochs=None):
