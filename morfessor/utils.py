@@ -4,57 +4,9 @@ shared between different modules and variants of the software.
 
 import logging
 import math
-import numbers
 import random
 import sys
 import types
-
-
-def segmentation_to_splitloc(constructions):
-    """Return a list of split locations for a segmented compound."""
-    splitloc = []
-    i = 0
-    for c in constructions:
-        i += len(c)
-        splitloc.append(i)
-    return tuple(splitloc[:-1])
-
-
-def splitloc_to_segmentation(compound, splitloc):
-    """Return segmentation corresponding to the list of split locations."""
-    if isinstance(splitloc, numbers.Number):
-        return [compound[:splitloc], compound[splitloc:]]
-    parts = []
-    startpos = 0
-    endpos = 0
-    for i in range(len(splitloc)):
-        endpos = splitloc[i]
-        parts.append(compound[startpos:endpos])
-        startpos = endpos
-    parts.append(compound[endpos:])
-    return parts
-
-
-def constructions_to_str(constructions):
-    """Return a readable string for a list of constructions."""
-    if _is_string(constructions[0]):
-        # Constructions are strings
-        return ' + '.join(constructions)
-    else:
-        # Constructions are not strings (should be tuples of strings)
-        return ' + '.join(map(lambda x: ' '.join(x), constructions))
-
-
-def join_constructions(constructions):
-    """Append the constructions after each other by addition.
-
-    Works for both lists and strings.
-
-    """
-    result = type(constructions[0])()
-    for c in constructions:
-        result += c
-    return result
 
 
 LOGPROB_ZERO = 1000000

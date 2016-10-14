@@ -11,7 +11,7 @@ from . import get_version
 from . import utils
 from .corpus import AnnotationCorpusWeight, MorphLengthCorpusWeight, \
     NumMorphCorpusWeight, FixedCorpusWeight, AlignedTokenCountCorpusWeight
-from .baseline import BaselineModel, RestrictedBaseline
+from .baseline import BaselineModel, MorphConstrImpl, RestrictedBaseline
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
@@ -373,6 +373,8 @@ def main(args):
                      atom_separator=args.separator,
                      lowercase=args.lowercase)
 
+    constr_class = MorphConstrImpl(force_splits=args.forcesplit, nosplit_re=args.nosplit)
+
     # Load exisiting model or create a new one
     if args.loadfile is not None:
         model = io.read_binary_model_file(args.loadfile)
@@ -380,10 +382,10 @@ def main(args):
     else:
         modelclass = BaselineModel if args.restannofile is None \
             else RestrictedBaseline
-        model = modelclass(forcesplit_list=args.forcesplit,
-                           corpusweight=args.corpusweight,
+        model = modelclass(corpusweight=args.corpusweight,
                            use_skips=args.skips,
-                           nosplit_re=args.nosplit)
+                           constr_class=constr_class
+                           )
 
     if args.loadsegfile is not None:
         model.load_segmentations(io.read_segmentation_file(args.loadsegfile))
