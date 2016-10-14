@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
 import collections
 import heapq
+import itertools
 import logging
 import math
 import numbers
@@ -782,10 +783,7 @@ class BaselineModel(object):
         # indices = range(1, clen+1) if allowed_boundaries is None \
         #           else allowed_boundaries+[clen]
 
-        START = collections.namedtuple("START", "")
-        END = collections.namedtuple("END", "")
-
-        grid= {START: (0.0, START)}
+        grid= {None: (0.0, None)}
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
             logtokens = math.log(self._corpus_coding.tokens +
@@ -805,13 +803,13 @@ class BaselineModel(object):
                         self._lexicon_coding.get_codelength(compound) / \
                         self._corpus_coding.weight
 
-        for t in zip(self.cc.split_locations(compound), [END]):
+        for t in itertools.chain(self.cc.split_locations(compound), [None]):
             # Select the best path to current node.
             # Note that we can come from any node in history.
             bestpath = None
             bestcost = None
 
-            for pt in zip([START], self.cc.split_locations(self.cc.split(compound, t)[0])):
+            for pt in itertools.chain([None], self.cc.split_locations(self.cc.split(compound, t)[0])):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
@@ -848,8 +846,8 @@ class BaselineModel(object):
 
         splitlocs = []
 
-        cost, path = grid[END]
-        while path is not START:
+        cost, path = grid[None]
+        while path is not None:
             splitlocs.append(path)
             path = grid[path][1]
 
