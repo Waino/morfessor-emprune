@@ -776,7 +776,7 @@ class BaselineModel(object):
         #           else allowed_boundaries+[clen]
 
         START = collections.namedtuple("START", "")
-        END = collections.namedtuple("START", "")
+        END = collections.namedtuple("END", "")
 
         grid= {START: (0.0, START)}
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
