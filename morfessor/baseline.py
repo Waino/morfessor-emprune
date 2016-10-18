@@ -10,7 +10,7 @@ import re
 
 from .corpus import LexiconEncoding, CorpusEncoding, \
     AnnotatedCorpusEncoding, FixedCorpusWeight
-from .utils import _progress
+from .utils import _progress, tail
 from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
@@ -827,7 +827,7 @@ class BaselineModel(object):
             bestpath = None
             bestcost = None
 
-            for pt in itertools.chain([None], self.cc.split_locations(compound, stop=t)):
+            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]

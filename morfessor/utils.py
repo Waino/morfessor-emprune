@@ -8,6 +8,7 @@ import random
 import sys
 import types
 
+import collections
 
 LOGPROB_ZERO = 1000000
 
@@ -221,3 +222,9 @@ def _is_string(obj):
     except NameError:
         # Python 3
         return isinstance(obj, str)
+
+
+def tail(n, iterable):
+    "Return an iterator over the last n items"
+    # tail(3, 'ABCDEFG') --> E F G
+    return iter(collections.deque(iterable, maxlen=n))
