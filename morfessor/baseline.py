@@ -24,6 +24,81 @@ ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
 
+class GraphPhoneMorphConstrImpl(object):
+    type = collections.namedtuple("PhoneMorphConstr", ['graphemes', 'phonemes'])
+
+    @staticmethod
+    def force_split_locations(construction):
+        return []
+
+    @staticmethod
+    def split_locations(construction, start=None, stop=None):
+        """
+        Return all possible split-locations between start and end. Start and end will not be returned.
+        """
+        start = (0,0) if start is None else start
+        end = (len(construction.graphemes), len(construction.phonemes)) if stop is None else stop
+
+        for gi in range(start[0] + 1, end[0]):
+            for pi in range(end[0] + 1, end[1]):
+                yield (gi, pi)
+
+    @staticmethod
+    def split(construction, loc):
+        assert 0 < loc[0] < len(construction.graphemes)
+        assert 0 < loc[1] < len(construction.phonemes)
+        return ((construction.graphemes[:loc[0]], construction.phonemes[:loc[1]]),
+               (construction.graphemes[loc[0]:], construction.phonemes[loc[1]:]))
+
+    @classmethod
+    def splitn(cls, construction, locs):
+        if not hasattr(locs, '__iter__'):
+            for p in cls.split(construction, locs):
+                yield p
+            return
+
+        prev = (0,0)
+        for l in locs:
+            assert prev[0] < l < len(construction.phonemes)
+            assert prev[1] < l < len(construction.graphemes)
+            yield (construction.graphemes[prev[0]:l[0]], construction.phonemes[prev[1]:l[1]])
+            prev = l
+            yield (construction.graphemes[prev[0]:], construction.phonemes[prev[1]:])
+
+    @staticmethod
+    def parts_to_splitlocs(parts):
+        cur_len = 0
+        for p in parts[:-1]:
+            cur_len += len(p)
+            yield cur_len
+
+    @staticmethod
+    def slice(construction, start=None, stop=None):
+        return (construction.graphemes[start[0]:stop[0]],
+                construction.phonemes[start[1]:stop[1]])
+
+    @classmethod
+    def from_string(cls, string):
+        g, p = string.split('/', 1)
+        return cls.type(g, p)
+
+    @staticmethod
+    def to_string(construction):
+        return u"{}/{}".format(construction.graphemes, construction.phonemes)
+
+    @staticmethod
+    def corpus_key(construction):
+        return construction
+
+    @staticmethod
+    def lex_key(construction):
+        return construction.graphemes
+
+    @staticmethod
+    def atoms(construction):
+        return construction.graphemes
+
+
 class MorphConstrImpl(object):
     def __init__(self, force_splits=None, nosplit_re=None):
         self._force_splits = set(force_splits) if force_splits is not None else set()
@@ -107,7 +182,8 @@ class MorphConstrImpl(object):
     def lex_key(construction):
         return construction
 
-    def atoms(self, construction):
+    @staticmethod
+    def atoms(construction):
         return construction
 
 
