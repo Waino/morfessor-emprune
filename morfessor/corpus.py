@@ -5,7 +5,7 @@ import logging
 import math
 import re
 
-from .utils import segmentation_to_splitloc, _progress
+from .utils import _progress
 
 _logger = logging.getLogger(__name__)
 

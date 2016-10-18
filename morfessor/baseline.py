@@ -27,18 +27,27 @@ ConstrNode = collections.namedtuple('ConstrNode',
 class MorphConstrImpl(object):
     def __init__(self, force_splits=None, nosplit_re=None):
         self._force_splits = set(force_splits) if force_splits is not None else set()
-        self._nosplit = re.compile(nosplit_re, re.UNICODE) if re is not None else None
+        self._nosplit = re.compile(nosplit_re, re.UNICODE) if nosplit_re is not None else None
 
+    #TODO, should this method just return parts?
     def force_split_locations(self, construction):
-        start = 0
+        # start = 0
+        # for i in range(len(construction)):
+        #     if construction[i] in self._force_splits:
+        #         if i - start > 0:
+        #             yield construction[start:i]
+        #         yield construction[i:i+1]
+        #         start = i+1
+        # if start < len(construction):
+        #     yield construction[start:]
+        prev = 0
         for i in range(len(construction)):
             if construction[i] in self._force_splits:
-                if i - start > 0:
-                    yield construction[start:i]
-                yield construction[i:i+1]
-                start = i+1
-        if start < len(construction):
-            yield construction[start:]
+                if i-prev > 0:
+                    yield i
+                if i+1 < len(construction):
+                    yield i+1
+                prev = i+1
 
     def split_locations(self, construction):
         for i in range(1, len(construction)):
@@ -54,11 +63,14 @@ class MorphConstrImpl(object):
     @classmethod
     def splitn(cls, construction, locs):
         if not hasattr(locs, '__iter__'):
-            return cls.split(construction, locs)
+            for p in cls.split(construction, locs):
+                yield p
+            return
 
         prev = 0
         for l in locs:
-            assert prev < l < len(construction)
+            assert prev < l
+            assert l < len(construction)
             yield construction[prev:l]
             prev = l
         yield construction[prev:]
