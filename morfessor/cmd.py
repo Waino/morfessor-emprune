@@ -348,7 +348,7 @@ def configure_logger(logger, args):
         (hasattr(sys.stderr, 'isatty') and not sys.stderr.isatty())):
         utils.show_progress_bar = False
 
-    if args.progress:
+    if "progress" in args and args.progress:
         utils.show_progress_bar = True
         ch.setLevel(max(ch.level, logging.INFO))
 

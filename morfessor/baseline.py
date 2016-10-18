@@ -49,8 +49,14 @@ class MorphConstrImpl(object):
                     yield i+1
                 prev = i+1
 
-    def split_locations(self, construction):
-        for i in range(1, len(construction)):
+    def split_locations(self, construction, start=None, stop=None):
+        """
+        Return all possible split-locations between start and end. Start and end will not be returned.
+        """
+        start = start if start is not None else 0
+        stop = stop if stop is not None else len(construction)
+
+        for i in range(start+1, stop):
             if self._nosplit and self._nosplit.match(construction[i-1:i+1]):
                 continue
             yield i
@@ -69,8 +75,7 @@ class MorphConstrImpl(object):
 
         prev = 0
         for l in locs:
-            assert prev < l
-            assert l < len(construction)
+            assert prev < l < len(construction)
             yield construction[prev:l]
             prev = l
         yield construction[prev:]
@@ -331,6 +336,7 @@ class BaselineModel(object):
             parts: desired constructions of the compound
 
         """
+        parts = list(parts)
         if len(parts) == 1:
             rcount, count = self._remove(compound)
             self._analyses[compound] = ConstrNode(rcount, 0, tuple())
@@ -795,7 +801,7 @@ class BaselineModel(object):
         # indices = range(1, clen+1) if allowed_boundaries is None \
         #           else allowed_boundaries+[clen]
 
-        grid= {None: (0.0, None)}
+        grid = {None: (0.0, None)}
         if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
                 addcount > 0:
             logtokens = math.log(self._corpus_coding.tokens +
@@ -821,7 +827,7 @@ class BaselineModel(object):
             bestpath = None
             bestcost = None
 
-            for pt in itertools.chain([None], self.cc.split_locations(self.cc.split(compound, t)[0])):
+            for pt in itertools.chain([None], self.cc.split_locations(compound, stop=t)):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
@@ -863,7 +869,7 @@ class BaselineModel(object):
             splitlocs.append(path)
             path = grid[path][1]
 
-        constructions = self.cc.splitn(compound, reversed(splitlocs))
+        constructions = list(self.cc.splitn(compound, reversed(splitlocs)))
 
         # Add boundary cost
         cost += (math.log(self._corpus_coding.tokens +
