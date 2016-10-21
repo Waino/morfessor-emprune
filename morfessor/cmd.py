@@ -11,7 +11,8 @@ from . import get_version
 from . import utils
 from .corpus import AnnotationCorpusWeight, MorphLengthCorpusWeight, \
     NumMorphCorpusWeight, FixedCorpusWeight, AlignedTokenCountCorpusWeight
-from .baseline import BaselineModel, MorphConstrImpl, RestrictedBaseline
+from .baseline import BaselineModel, RestrictedBaseline
+from .constructions.base import BaseConstructionMethods
 from .exception import ArgumentException
 from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
@@ -373,7 +374,7 @@ def main(args):
                      atom_separator=args.separator,
                      lowercase=args.lowercase)
 
-    constr_class = MorphConstrImpl(force_splits=args.forcesplit, nosplit_re=args.nosplit)
+    constr_class = BaseConstructionMethods(force_splits=args.forcesplit, nosplit_re=args.nosplit)
 
     # Load exisiting model or create a new one
     if args.loadfile is not None:
