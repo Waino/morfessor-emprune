@@ -6,8 +6,8 @@ import logging
 import math
 import numbers
 import random
-import re
 
+from .constructions.base import BaseConstructionMethods
 from .corpus import LexiconEncoding, CorpusEncoding, \
     AnnotatedCorpusEncoding, FixedCorpusWeight
 from .utils import _progress, tail
@@ -49,7 +49,7 @@ class BaselineModel(object):
 
         """
 
-        self.cc = constr_class if constr_class is not None else MorphConstrImpl()
+        self.cc = constr_class if constr_class is not None else BaseConstructionMethods()
 
         # In analyses for each construction a ConstrNode is stored. All
         # training data has a rcount (real count) > 0. All real morphemes
