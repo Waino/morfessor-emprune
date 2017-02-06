@@ -84,3 +84,6 @@ class Cost(object):
 
     def types(self):
         pass
+
+    def get_coding_cost(self, compound):
+        return self._lexicon_coding.get_codelength(compound) / self._corpus_coding.weight

@@ -20,12 +20,12 @@ class ParallelConstructionMethods(object):
             for pi in range(start[1] + 1, end[1]):
                 yield (gi, pi)
 
-    @staticmethod
-    def split(construction, loc):
+    @classmethod
+    def split(cls, construction, loc):
         assert 0 < loc[0] < len(construction.graphemes)
         assert 0 < loc[1] < len(construction.phonemes)
-        return ((construction.graphemes[:loc[0]], construction.phonemes[:loc[1]]),
-               (construction.graphemes[loc[0]:], construction.phonemes[loc[1]:]))
+        return (cls.type(construction.graphemes[:loc[0]], construction.phonemes[:loc[1]]),
+               cls.type(construction.graphemes[loc[0]:], construction.phonemes[loc[1]:]))
 
     @classmethod
     def splitn(cls, construction, locs):
@@ -38,9 +38,9 @@ class ParallelConstructionMethods(object):
         for l in locs:
             assert prev[0] < l[0] < len(construction.graphemes)
             assert prev[1] < l[1] < len(construction.phonemes)
-            yield (construction.graphemes[prev[0]:l[0]], construction.phonemes[prev[1]:l[1]])
+            yield cls.type(construction.graphemes[prev[0]:l[0]], construction.phonemes[prev[1]:l[1]])
             prev = l
-        yield (construction.graphemes[prev[0]:], construction.phonemes[prev[1]:])
+        yield cls.type(construction.graphemes[prev[0]:], construction.phonemes[prev[1]:])
 
     @staticmethod
     def parts_to_splitlocs(parts):

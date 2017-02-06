@@ -600,18 +600,13 @@ class BaselineModel(object):
                 if count > 0:
                     cost += (logtokens - math.log(count + addcount))
                 elif addcount > 0:
-                    if self._corpus_coding.tokens == 0:
+                    if self.cost._corpus_coding.tokens == 0:
                         cost += (addcount * math.log(addcount) +
-                                 newboundcost +
-                                 self._lexicon_coding.get_codelength(
-                                     construction) /
-                                 self._corpus_coding.weight)
+                                 newboundcost + self.cost.get_coding_cost(construction))
                     else:
                         cost += (logtokens - math.log(addcount) +
-                                 newboundcost +
-                                 self._lexicon_coding.get_codelength(
-                                     construction) /
-                                 self._corpus_coding.weight)
+                                 newboundcost + self.cost.get_coding_cost(construction))
+
                 elif len(self.cc.corpus_key(construction)) == 1:
                     cost += badlikelihood
                 elif allow_longer_unk_splits:
@@ -636,9 +631,9 @@ class BaselineModel(object):
         constructions = list(self.cc.splitn(compound, reversed(splitlocs)))
 
         # Add boundary cost
-        cost += (math.log(self._corpus_coding.tokens +
-                          self._corpus_coding.boundaries) -
-                 math.log(self._corpus_coding.boundaries))
+        cost += (math.log(self.cost._corpus_coding.tokens +
+                          self.cost._corpus_coding.boundaries) -
+                 math.log(self.cost._corpus_coding.boundaries))
         return constructions, cost
 
     #TODO project lambda

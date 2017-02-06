@@ -1,0 +1,42 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+import io
+import sys
+
+import logging
+
+import morfessor
+from morfessor import BaselineModel
+from morfessor import ParallelConstructionMethods
+from morfessor.data import DataPoint
+
+def main(argv):
+    alpha = float(argv[0])
+    data = []
+    for line in io.open(argv[1], encoding='utf-8'):
+        parts = line.strip().split()
+        graphemes = parts[0]
+        phonemes = tuple(parts[1:])
+        compound = ParallelConstructionMethods.type(graphemes, phonemes)
+        data.append(DataPoint(count=1, compound=compound, splitlocs=()))
+
+    model = BaselineModel(corpusweight=alpha, constr_class=ParallelConstructionMethods)
+    model.load_data(data)
+    model.train_batch()
+
+    with io.open(argv[2], 'w', encoding='utf-8') as outf:
+        for c,_,w in model.get_segmentations():
+            print("{} {}".format(c, " + ".join(ParallelConstructionMethods.to_string(w1) for w1 in w)), file=outf)
+
+class opts(dict):
+    log_file = None
+    verbose = 1
+    progress = True
+
+if __name__ == "__main__":
+    o = opts()
+    o['progress'] = True
+
+    morfessor.configure_logger(logging.getLogger(), o)
+    main(sys.argv[1:])
