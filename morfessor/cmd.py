@@ -7,11 +7,13 @@ import sys
 import time
 import string
 
+from .data import freq_threshold, count_modifier, DataPoint, merge_counts, rand_split
+
 from . import get_version
 from . import utils
 from .corpus import AnnotationCorpusWeight, MorphLengthCorpusWeight, \
     NumMorphCorpusWeight, FixedCorpusWeight, AlignedTokenCountCorpusWeight
-from .baseline import BaselineModel, RestrictedBaseline
+from .baseline import BaselineModel
 from .constructions.base import BaseConstructionMethods
 from .exception import ArgumentException
 from .io import MorfessorIO
@@ -458,6 +460,24 @@ def main(args):
         else:
             algparams.append(())
 
+    # Prep data
+    if args.trainmode not in ('none', 'batch'):
+        onlinedata = 'online' in args.trainmode
+        if args.list:
+            data = io.read_corpus_list_files(args.trainfiles)
+        else:
+            data = io.read_corpus_files(args.trainfiles)
+        data = [DataPoint(d[0], d[1], ()) for d in data]
+        data = merge_counts(data)
+
+        if args.freqthreshold > 1:
+            data = freq_threshold(data, args.freqthreshold, onlinedata)
+        if dampfunc is not None:
+            data = count_modifier(data, dampfunc, onlinedata)
+        if args.splitprob is not None:
+            data = rand_split(data, BaseConstructionMethods, args.splitprob)
+
+
     # Train model
     if args.trainmode == 'none':
         pass
@@ -482,19 +502,10 @@ def main(args):
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.trainmode == 'init':
-            if args.list:
-                data = io.read_corpus_list_files(args.trainfiles)
-            else:
-                data = io.read_corpus_files(args.trainfiles)
-            c = model.load_data(data, args.freqthreshold, dampfunc,
-                                args.splitprob)
+            c = model.load_data(data)
+
         elif args.trainmode == 'init+batch':
-            if args.list:
-                data = io.read_corpus_list_files(args.trainfiles)
-            else:
-                data = io.read_corpus_files(args.trainfiles)
-            c = model.load_data(data, args.freqthreshold, dampfunc,
-                                args.splitprob)
+            c = model.load_data(data)
             for alg, algp in zip(args.algorithms, algparams):
                 _logger.info("Batch training with %s algorithm", alg)
                 e, c = model.train_batch(
@@ -520,21 +531,19 @@ def main(args):
                                 "'online+batch'")
             alg, algp = args.algorithms[0], algparams[0]
             _logger.info("On-line training with %s algorithm", alg)
-            data = io.read_corpus_files(args.trainfiles)
             e, c = model.train_online(
-                data, dampfunc, args.epochinterval, alg, algp,
-                args.splitprob, args.maxepochs)
+                data, args.epochinterval, alg, algp,
+                args.maxepochs)
             _logger.info("Epochs: %s", e)
             _logger.info("Current cost: %s", c)
         elif args.trainmode == 'online+batch':
             first = True
             for alg, algp in zip(args.algorithms, algparams):
                 if first:
-                    data = io.read_corpus_files(args.trainfiles)
                     _logger.info("On-line training with %s algorithm", alg)
                     e, c = model.train_online(
-                        data, dampfunc, args.epochinterval, alg, algp,
-                        args.splitprob, args.maxepochs)
+                        data, args.epochinterval, alg, algp,
+                        args.maxepochs)
                     _logger.info("Epochs: %s", e)
                     _logger.info("Current cost: %s", c)
                     first = False

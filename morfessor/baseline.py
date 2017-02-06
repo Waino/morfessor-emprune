@@ -7,6 +7,7 @@ import math
 import numbers
 import random
 
+from .cost import Cost
 from .constructions.base import BaseConstructionMethods
 from .corpus import LexiconEncoding, CorpusEncoding, \
     AnnotatedCorpusEncoding, FixedCorpusWeight
@@ -60,80 +61,33 @@ class BaselineModel(object):
         self._segment_only = False
 
         # Cost variables
-        self._lexicon_coding = LexiconEncoding()
-        self._corpus_coding = CorpusEncoding(self._lexicon_coding)
-        self._annot_coding = None
+        # self._lexicon_coding = LexiconEncoding()
+        # self._corpus_coding = CorpusEncoding(self._lexicon_coding)
+        # self._annot_coding = None
 
         #Set corpus weight updater
-        self.set_corpus_weight_updater(corpusweight)
+        # self.set_corpus_weight_updater(corpusweight)
 
-        # Configuration variables
-        self._use_skips = use_skips  # Random skips for frequent constructions
-        self._supervised = False
+        self.cost = Cost(self.cc, corpusweight)
 
-        # Counter for random skipping
-        self._counter = collections.Counter()
 
     @property
     def tokens(self):
         """Return the number of construction tokens."""
-        return self._corpus_coding.tokens
+        return self.cost.tokens()
 
     @property
     def types(self):
         """Return the number of construction types."""
-        return self._corpus_coding.types - 1  # do not include boundary
-
-    def set_corpus_weight_updater(self, corpus_weight):
-        if corpus_weight is None:
-            self._corpus_weight_updater = FixedCorpusWeight(1.0)
-        elif isinstance(corpus_weight, numbers.Number):
-            self._corpus_weight_updater = FixedCorpusWeight(corpus_weight)
-        else:
-            self._corpus_weight_updater = corpus_weight
-
-        self._corpus_weight_updater.update(self, 0)
+        return self.cost.types() - 1  # do not include boundary
 
     def _check_segment_only(self):
         if self._segment_only:
             raise SegmentOnlyModelException()
 
-    def _check_integrity(self):
-        """Check integrity of the model data structures"""
-        failed = False
-        # Check constructions
-        for construction in self._analyses.keys():
-            node = self._analyses[construction]
-            if node.count < 1:
-                _logger.critical("Non-positive count %s for construction %s",
-                                 node.count, construction)
-                failed = True
-            if node.count < node.rcount:
-                _logger.critical("Total count %s lower than root count %s "
-                                 "for construction %s",
-                                 node.count, node.rcount, construction)
-                failed = True
-            if not node.splitloc:
-                continue
-            for part in self.cc.splitn(construction, node.splitloc):
-                if not part in self._analyses:
-                    _logger.critical(
-                        "Subconstruction '%s' of '%s' not found",
-                        part, construction)
-                    failed = True
-                elif self._analyses[part].count < node.count:
-                    _logger.critical(
-                        ("Subconstruction '%s' has lower "
-                         "count than parent '%s': %s < %s"),
-                        part, construction, self._analyses[part].count,
-                        node.count)
-                    failed = True
-        if failed:
-            raise MorfessorException("Corrupted model")
-
     def _epoch_checks(self):
         """Apply per epoch checks"""
-        self._check_integrity()
+        # self._check_integrity()
 
     def _epoch_update(self, epoch_num):
         """Do model updates that are necessary between training epochs.
@@ -152,14 +106,14 @@ class BaselineModel(object):
 
         """
         forced_epochs = 0
-        if self._corpus_weight_updater.update(self, epoch_num):
+        if self.cost._corpus_weight_updater.update(self, epoch_num):
             forced_epochs += 2
 
-        if self._use_skips:
-            self._counter = collections.Counter()
-        if self._supervised:
-            self._update_annotation_choices()
-            self._annot_coding.update_weight()
+        # if self._use_skips:
+        #     self._counter = collections.Counter()
+        # if self._supervised:
+        #     self._update_annotation_choices()
+        #     self._annot_coding.update_weight()
 
         return forced_epochs
 
@@ -199,7 +153,7 @@ class BaselineModel(object):
             for constr in analysis:
                 count = self.get_construction_count(constr)
                 if count > 0:
-                    cost += (math.log(self._corpus_coding.tokens) -
+                    cost += (math.log(self.cost.tokens()) -
                              math.log(count))
                 else:
                     cost -= self.penalty  # penalty is negative
@@ -210,7 +164,7 @@ class BaselineModel(object):
 
     def _add_compound(self, compound, c):
         """Add compound with count c to data."""
-        self._corpus_coding.boundaries += c
+        self.cost._corpus_coding.boundaries += c
         self._modify_construction_count(compound, c)
         oldrc = self._analyses[compound].rcount
         self._analyses[compound] = \
@@ -221,21 +175,6 @@ class BaselineModel(object):
         rcount, count, splitloc = self._analyses[construction]
         self._modify_construction_count(construction, -count)
         return rcount, count
-
-    def _random_split(self, compound, threshold):
-        """Return a random split for compound.
-
-        Arguments:
-            compound: compound to split
-            threshold: probability of splitting at each position
-
-        """
-        constructions = []
-        for part in self.cc.splitn(compound, self.cc.force_split_locations(compound)):
-            splitlocs = tuple(i for i in self.cc.split_locations(part) if random.random() < threshold)
-            constructions.extend(self.cc.splitn(part, splitlocs))
-
-        return constructions
 
     def _clear_compound_analysis(self, compound):
         """Clear analysis of a compound from model"""
@@ -310,8 +249,8 @@ class BaselineModel(object):
         Returns list of segments.
 
         """
-        if self._use_skips and self._test_skip(compound):
-            return self.segment(compound)
+        # if self._use_skips and self._test_skip(compound):
+        #     return self.segment(compound)
         # Collect forced subsegments
 
         parts = list(self.cc.splitn(compound, self.cc.force_split_locations(compound)))
@@ -331,8 +270,8 @@ class BaselineModel(object):
         Returns list of segments.
 
         """
-        if self._use_skips and self._test_skip(construction):
-            return self.segment(construction)
+        # if self._use_skips and self._test_skip(construction):
+        #     return self.segment(construction)
         rcount, count = self._remove(construction)
 
         # Check all binary splits and no split
@@ -396,15 +335,8 @@ class BaselineModel(object):
             for child in self.cc.splitn(construction, splitloc):
                 self._modify_construction_count(child, dcount)
         else:
+            self.cost.update(construction, newcount-count)
             # Real construction
-            self._corpus_coding.update_count(self.cc.corpus_key(construction), count, newcount)
-            if self._supervised:
-                self._annot_coding.update_count(self.cc.corpus_key(construction), count, newcount)
-
-            if count == 0 and newcount > 0:
-                self._lexicon_coding.add(self.cc.lex_key(construction))
-            elif count > 0 and newcount == 0:
-                self._lexicon_coding.remove(self.cc.lex_key(construction))
 
     def get_compounds(self):
         """Return the compound types stored by the model."""
@@ -419,7 +351,8 @@ class BaselineModel(object):
 
     def get_cost(self):
         """Return current model encoding cost."""
-        cost = self._corpus_coding.get_cost() + self._lexicon_coding.get_cost()
+        return self.cost.cost()
+        cost = self.cost.cost()
         if self._supervised:
             return cost + self._annot_coding.get_cost()
         else:
@@ -433,73 +366,22 @@ class BaselineModel(object):
             if c > 0:
                 yield c, w, self.segment(w)
 
-    def load_data(self, data, freqthreshold=1, count_modifier=None,
-                  init_rand_split=None):
+    def load_data(self, data):
         """Load data to initialize the model for batch training.
 
         Arguments:
-            data: iterator of (count, compound_atoms) tuples
-            freqthreshold: discard compounds that occur less than
-                             given times in the corpus (default 1)
-            count_modifier: function for adjusting the counts of each
-                              compound
-            init_rand_split: If given, random split the word with
-                               init_rand_split as the probability for each
-                               split
+            data: iterator of DataPoint tuples
 
         Adds the compounds in the corpus to the model lexicon. Returns
         the total cost.
 
         """
         self._check_segment_only()
-        totalcount = collections.Counter()
-        for count, compound_str in data:
-            if len(compound_str) == 0:
-                continue
-            totalcount[self.cc.from_string(compound_str)] += count
-
-        for compound, count in totalcount.items():
-            if count < freqthreshold:
-                continue
-            if count_modifier is not None:
-                self._add_compound(compound, count_modifier(count))
-            else:
-                self._add_compound(compound, count)
-
-            if init_rand_split is not None and init_rand_split > 0:
-                parts = self._random_split(compound, init_rand_split)
-                # I think set_compound_analysis should clear a previous analysis?
-                self._clear_compound_analysis(compound)
-                self._set_compound_analysis(compound, parts)
-
+        for dp in data:
+            self._add_compound(dp.compound, dp.count)
+            self._clear_compound_analysis(dp.compound)
+            self._set_compound_analysis(dp.compound, self.cc.splitn(dp.compound, dp.splitlocs))
         return self.get_cost()
-
-    def load_segmentations(self, segmentations):
-        """Load model from existing segmentations.
-
-        The argument should be an iterator providing a count, a
-        compound, and its segmentation.
-
-        """
-        self._check_segment_only()
-        for count, compound_str, segmentation_strs in segmentations:
-            compound = self.cc.from_string(compound_str)
-            self._add_compound(compound, count)
-            self._clear_compound_analysis(compound)
-            self._set_compound_analysis(compound, (self.cc.from_string(s) for s in segmentation_strs))
-
-    def set_annotations(self, annotations, annotatedcorpusweight=None):
-        """Prepare model for semi-supervised learning with given
-         annotations.
-
-         """
-        self._check_segment_only()
-        self._supervised = True
-        self.annotations = annotations
-        self._annot_coding = AnnotatedCorpusEncoding(self._corpus_coding,
-                                                     weight=
-                                                     annotatedcorpusweight)
-        self._annot_coding.boundaries = len(self.annotations)
 
     def segment(self, compound):
         """Segment the compound by looking it up in the model analyses.
@@ -546,7 +428,7 @@ class BaselineModel(object):
         newcost = self.get_cost()
         compounds = list(self.get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
-                     (len(compounds), self._corpus_coding.boundaries))
+                     (len(compounds), self.cost._corpus_coding.boundaries))
 
         if algorithm == 'flatten':
             _logger.info("Flattening analysis tree")
@@ -586,7 +468,7 @@ class BaselineModel(object):
             _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
             if (forced_epochs == 0 and
                     newcost >= oldcost - finish_threshold *
-                    self._corpus_coding.boundaries):
+                    self.cost._corpus_coding.boundaries):
                 break
             if forced_epochs > 0:
                 forced_epochs -= 1
@@ -645,43 +527,24 @@ class BaselineModel(object):
 
             for _ in _progress(range(epoch_interval)):
                 try:
-                    _, w = next(data)
+                    dp = next(data)
                 except StopIteration:
                     more_tokens = False
                     break
 
-                if len(w) == 0:
-                    # Newline in corpus
-                    continue
+                self._add_compound(dp.compound, dp.count)
+                self._clear_compound_analysis(dp.compound)
+                self._set_compound_analysis(dp.compound, self.cc.splitn(dp.compound, dp.splitlocs))
 
-                compound = self.cc.from_string(w)
-
-                if count_modifier is not None:
-                    if not compound in counts:
-                        c = 0
-                        counts[compound] = 1
-                        addc = 1
-                    else:
-                        c = counts[compound]
-                        counts[compound] = c + 1
-                        addc = count_modifier(c + 1) - count_modifier(c)
-                    if addc > 0:
-                        self._add_compound(compound, addc)
-                else:
-                    self._add_compound(compound, 1)
-                if init_rand_split is not None and init_rand_split > 0:
-                    parts = self._random_split(compound, init_rand_split)
-                    self._clear_compound_analysis(compound)
-                    self._set_compound_analysis(compound, parts)
                 if algorithm == 'recursive':
-                    segments = self._recursive_optimize(compound, *algorithm_params)
+                    segments = self._recursive_optimize(dp.compound, *algorithm_params)
                 elif algorithm == 'viterbi':
-                    segments = self._viterbi_optimize(compound, *algorithm_params)
+                    segments = self._viterbi_optimize(dp.compound, *algorithm_params)
                 else:
                     raise MorfessorException("unknown algorithm '%s'" %
                                              algorithm)
                 _logger.debug("#%s: %s -> %s" %
-                              (i, compound, " + ".join(self.cc.to_string(s) for s in segments)))
+                              (i, dp.compound, " + ".join(self.cc.to_string(s) for s in segments)))
                 i += 1
 
             epochs += 1
@@ -715,24 +578,12 @@ class BaselineModel(object):
         #           else allowed_boundaries+[clen]
 
         grid = {None: (0.0, None)}
-        if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
-                addcount > 0:
-            logtokens = math.log(self._corpus_coding.tokens +
-                                 self._corpus_coding.boundaries + addcount)
-        else:
-            logtokens = 0
-        if addcount > 0:
-            newboundcost = (self._lexicon_coding.boundaries + addcount) * \
-                           math.log(self._lexicon_coding.boundaries + addcount)
-            if self._lexicon_coding.boundaries > 0:
-                newboundcost -= self._lexicon_coding.boundaries * \
-                                math.log(self._lexicon_coding.boundaries)
-            newboundcost /= self._corpus_coding.weight
-        else:
-            newboundcost = 0
-        badlikelihood = 1.0 + len(self.cc.corpus_key(compound)) * logtokens + newboundcost + \
-                        self._lexicon_coding.get_codelength(compound) / \
-                        self._corpus_coding.weight
+        tokens = self.cost.all_tokens() + addcount
+        logtokens = math.log(tokens) if tokens > 0 else 0
+
+        newboundcost = self.cost.newbound_cost(addcount) if addcount > 0 else 0
+
+        badlikelihood = self.cost.bad_likelihood(compound,addcount)
 
         for t in itertools.chain(self.cc.split_locations(compound), [None]):
             # Select the best path to current node.
@@ -936,11 +787,11 @@ class BaselineModel(object):
         return [(constr, cost) for cost, constr in sorted(results)]
 
     def get_corpus_coding_weight(self):
-        return self._corpus_coding.weight
+        return self.cost._corpus_coding.weight
 
     def set_corpus_coding_weight(self, weight):
         self._check_segment_only()
-        self._corpus_coding.weight = weight
+        self.cost._corpus_coding.weight = weight
 
     def make_segment_only(self):
         """Reduce the size of this model by removing all non-morphs from the
@@ -965,539 +816,3 @@ class BaselineModel(object):
 # splitloc = integer or tuple. Location(s) of the possible splits for virtual
 #            constructions; empty tuple or 0 if real construction
 SimpleConstrNode = collections.namedtuple('ConstrNode', ['count', 'splitloc'])
-
-#TODO project lambda, implement this into the normal model
-class RestrictedBaseline(BaselineModel):
-    """Morfessor Baseline model class that support restricted segmentation
-
-    Implements training of and segmenting with a Morfessor model. The model
-    is complete agnostic to whether it is used with lists of strings (finding
-    phrases in sentences) or strings of characters (finding morphs in words).
-
-    """
-
-    def __init__(self, forcesplit_list=None, corpusweight=None,
-                 use_skips=False, nosplit_re=None):
-        """Initialize a new model instance.
-
-        Arguments:
-            forcesplit_list: force segmentations on the characters in
-                               the given list
-            corpusweight: weight for the corpus cost
-            use_skips: randomly skip frequently occurring constructions
-                         to speed up training
-            nosplit_re: regular expression string for preventing splitting
-                          in certain contexts
-
-        """
-        super(RestrictedBaseline, self).__init__(
-            forcesplit_list, corpusweight, use_skips, nosplit_re)
-        # Stores SimpleConstrNode for each compound in training data.
-        self._compounds = {}
-        # In analyses for each construction a SimpleConstrNode is
-        # stored. Real constructions have no split locations.
-        self._analyses = {}
-        # Configuration variables
-        self._restricted = False
-        # Allowed segmentation boundaries for compounds
-        self.allowed_boundaries = {}
-
-    def _check_integrity(self):
-        failed = False
-        parents = collections.defaultdict(list)
-        # Check compounds
-        for compound in self._compounds.keys():
-            node = self._compounds[compound]
-            if node.splitloc:
-                children = splitloc_to_segmentation(compound,
-                                                    node.splitloc)
-            else:
-                children = [compound]
-            for part in children:
-                if not part in self._analyses:
-                    _logger.critical(
-                        "Construction '%s' of compound '%s' not found",
-                        part, compound)
-                    failed = True
-                elif self._analyses[part].count < node.count:
-                    _logger.critical(
-                        ("Construction '%s' has lower "
-                         "count than parent compound '%s': %s < %s"),
-                        part, compound, self._analyses[part].count,
-                        node.count)
-                    failed = True
-                parents[part].append((compound, node.count))
-        # Check constructions
-        for construction in self._analyses.keys():
-            node = self._analyses[construction]
-            if node.count < 1:
-                _logger.critical("Non-positive count %s for construction %s",
-                                 node.count, construction)
-                failed = True
-            if not node.splitloc:
-                continue
-            for part in splitloc_to_segmentation(construction,
-                                                 node.splitloc):
-                if not part in self._analyses:
-                    _logger.critical(
-                        "Subconstruction '%s' of '%s' not found",
-                        part, construction)
-                    failed = True
-                elif self._analyses[part].count < node.count:
-                    _logger.critical(
-                        ("Subconstruction '%s' has lower "
-                         "count than parent '%s': %s < %s"),
-                        part, construction, self._analyses[part].count,
-                        node.count)
-                    failed = True
-                parents[part].append((construction, node.count))
-        # Check count sums
-        for construction in parents.keys():
-            node = self._analyses[construction]
-            psum = sum([x[1] for x in parents[construction]])
-            if psum != node.count:
-                _logger.critical(
-                    ("Counts %s of construction '%s' does not "
-                     "match counts of parents %s"),
-                    node.count, construction, parents[construction]
-                    if len(parents[construction]) < 20 else "")
-                failed = True
-        if failed:
-            raise MorfessorException("Corrupted model")
-
-    def _check_restrictions(self):
-        if not self._restricted:
-            return
-        violations = 0
-        rtotal = 0
-        stotal = 0
-        for _, compound, segmentation in self.get_segmentations():
-            if compound in self.allowed_boundaries:
-                rtotal += len(compound) - 1 - \
-                          len(self.allowed_boundaries[compound])
-                stotal += len(segmentation) - 1
-                for idx in segmentation_to_splitloc(segmentation):
-                    if idx not in self.allowed_boundaries[compound]:
-                        violations += 1
-        if rtotal > 0 and stotal > 0:
-            _logger.info(
-                ("Violated restrictions: %s "
-                 "(%.2f%% of restrictions, %.2f%% of segmentations)"),
-                violations, 100*violations/rtotal, 100*violations/stotal)
-
-    def _epoch_checks(self):
-        """Apply per epoch checks"""
-        self._check_integrity()
-        self._check_restrictions()
-
-    def _update_annotation_choices(self):
-        """Update the selection of alternative analyses in annotations.
-
-        For semi-supervised models, select the most likely alternative
-        analyses included in the annotations of the compounds.
-
-        """
-        if not self._supervised:
-            return
-
-        # Collect constructions from the most probable segmentations
-        # and add missing compounds also to the unannotated data
-        constructions = collections.Counter()
-        for compound, alternatives in self.annotations.items():
-            if not compound in self._compounds:
-                self._add_compound(compound, 1)
-
-            analysis, cost = self._best_analysis(alternatives)
-            for constr in analysis:
-                constructions[constr] += self._compounds[compound].count
-
-        # Apply the selected constructions in annotated corpus coding
-        self._annot_coding.set_constructions(constructions)
-        for constr in constructions.keys():
-            count = self.get_construction_count(constr)
-            self._annot_coding.set_count(constr, count)
-
-    def _add_compound(self, compound, count):
-        """Add compound with count to data."""
-        if compound in self._compounds:
-            oldc = self._compounds[compound].count
-            self._compounds[compound] = \
-                self._compounds[compound]._replace(count=oldc+count)
-        else:
-            self._compounds[compound] = SimpleConstrNode(count, tuple())
-        self._corpus_coding.boundaries += count
-        if self._compounds[compound].splitloc:
-            constructions = splitloc_to_segmentation(
-                compound, self._compounds[compound].splitloc)
-        else:
-            constructions = [compound]
-        for construction in constructions:
-            self._modify_construction_count(construction, count)
-
-    def _remove(self, construction):
-        """Remove construction from model."""
-        count, splitloc = self._analyses[construction]
-        self._modify_construction_count(construction, -count)
-        return count
-
-    def _random_split(self, compound, threshold):
-        """Return a random split for compound.
-
-        Arguments:
-            compound: compound to split
-            threshold: probability of splitting at each position
-
-        """
-        forced = segmentation_to_splitloc(self._force_split(compound))
-        splitloc = tuple(i for i in range(1, len(compound))
-                         if (i in forced or random.random() < threshold))
-        if self._restricted and compound in self.allowed_boundaries:
-            allowed = self.allowed_boundaries[compound]
-            splitloc = tuple(i for i in splitloc if i in allowed)
-        return splitloc_to_segmentation(compound, splitloc)
-
-    def _clear_compound_analysis(self, compound):
-        """Clear analysis of a compound from model"""
-        assert(compound in self._compounds)
-        rcount, splitloc = self._compounds[compound]
-        if splitloc:
-            for child in splitloc_to_segmentation(compound, splitloc):
-                self._modify_construction_count(child, -rcount)
-        else:
-            self._modify_construction_count(compound, -rcount)
-
-    def _set_compound_analysis(self, compound, parts):
-        """Set analysis of compound to according to given segmentation.
-
-        Arguments:
-            compound: compound to split
-            parts: desired constructions of the compound
-
-        Note: _clear_compound_analysis should usually be called first.
-
-        """
-        assert(compound in self._compounds)
-        rcount = self._compounds[compound].count
-        if len(parts) == 1:
-            self._compounds[compound] = \
-                self._compounds[compound]._replace(splitloc=tuple())
-            self._modify_construction_count(compound, rcount)
-        else:
-            self._compounds[compound] = \
-                self._compounds[compound]._replace(
-                splitloc=segmentation_to_splitloc(parts))
-            for constr in parts:
-                self._modify_construction_count(constr, rcount)
-
-    def _force_split(self, compound):
-        """Return forced split of the compound."""
-        if len(self.forcesplit_list) == 0:
-            return [compound]
-        clen = len(compound)
-        if self._restricted and compound in self.allowed_boundaries:
-            indices = self.allowed_boundaries[compound]
-        else:
-            indices = range(1, clen)
-        j = 0
-        parts = []
-        for i in indices:
-            if compound[i] in self.forcesplit_list:
-                if len(compound[j:i]) > 0:
-                    parts.append(compound[j:i])
-                parts.append(compound[i:i + 1])
-                j = i + 1
-        if j < clen:
-            parts.append(compound[j:])
-        return [p for p in parts if len(p) > 0]
-
-    def _viterbi_optimize(self, compound, addcount=0, maxlen=30):
-        """Optimize segmentation of the compound using the Viterbi algorithm.
-
-        Arguments:
-          compound: compound to optimize
-          addcount: constant for additive smoothing of Viterbi probs
-          maxlen: maximum length for a construction
-
-        Returns list of segments.
-
-        """
-        clen = len(compound)
-        if clen == 1:  # Single atom
-            return [compound]
-        if self._use_skips and self._test_skip(compound):
-            return self.segment(compound)
-
-        # Remove old analysis
-        self._clear_compound_analysis(compound)
-
-        # Restricted boundaries
-        if self._restricted and compound in self.allowed_boundaries:
-            allowed = self.allowed_boundaries[compound]
-        else:
-            allowed = None # Everything is allowed
-
-        # Collect forced subsegments
-        parts = self._force_split(compound)
-        if len(parts) > 1:
-            constructions = []
-            pos = 0
-            for part in parts:
-                if allowed is None:
-                    constructions += self.viterbi_segment(
-                        part, addcount=addcount, maxlen=maxlen)[0]
-                else:
-                    allowed_in_part = [x-pos for x in allowed
-                                       if (x > pos and x < pos+len(part))]
-                    constructions += self.viterbi_segment(
-                        part, addcount=addcount, maxlen=maxlen,
-                        allowed_boundaries=allowed_in_part)[0]
-                pos += len(part)
-        else:
-            constructions = self.viterbi_segment(
-                compound, addcount=addcount, maxlen=maxlen,
-                allowed_boundaries=allowed)[0]
-
-        # Set new analysis
-        self._set_compound_analysis(compound, constructions)
-        return constructions
-
-    def _recursive_optimize(self, compound):
-        """Optimize segmentation of the compound using recursive splitting.
-
-        Returns list of segments.
-
-        """
-        if len(compound) == 1:  # Single atom
-            return [compound]
-        if self._use_skips and self._test_skip(compound):
-            return self.segment(compound)
-
-        # Restricted boundaries
-        if self._restricted and compound in self.allowed_boundaries:
-            allowed = self.allowed_boundaries[compound]
-        else:
-            allowed = None # Everything is allowed
-
-        # Collect forced subsegments
-        parts = self._force_split(compound)
-        if len(parts) > 1:
-            self._clear_compound_analysis(compound)
-            self._set_compound_analysis(compound, parts)
-            # Use recursive algorithm to optimize the subsegments
-            constructions = []
-            pos = 0
-            for part in parts:
-                if allowed is None:
-                    constructions += self._recursive_split(part)
-                else:
-                    allowed_in_part = [x-pos for x in allowed
-                                       if (x > pos and x < pos+len(part))]
-                    constructions += self._recursive_split(
-                        part, allowed_in_part)
-                pos += len(part)
-        else:
-            constructions = self._recursive_split(compound, allowed)
-
-        return constructions
-
-    def _recursive_split(self, construction, allowed_boundaries=None):
-        """Optimize segmentation of the construction by recursive splitting.
-
-        Returns list of segments.
-
-        """
-        if allowed_boundaries is not None:
-            _logger.debug("restricted: %s %s", construction,
-                          allowed_boundaries)
-        if len(construction) == 1:  # Single atom
-            return [construction]
-        if self._use_skips and self._test_skip(construction):
-            return self._segment(construction)
-        count = self._remove(construction)
-
-        # Check all binary splits and no split
-        self._modify_construction_count(construction, count)
-        mincost = self.get_cost()
-        self._modify_construction_count(construction, -count)
-        splitloc = 0
-        indices = range(1, len(construction)) \
-            if allowed_boundaries is None else allowed_boundaries
-        for i in indices:
-            assert(i < len(construction))
-            if (self.nosplit_re and
-                self.nosplit_re.match(construction[(i - 1):(i + 1)])):
-                continue
-            prefix = construction[:i]
-            suffix = construction[i:]
-            self._modify_construction_count(prefix, count)
-            self._modify_construction_count(suffix, count)
-            cost = self.get_cost()
-            self._modify_construction_count(prefix, -count)
-            self._modify_construction_count(suffix, -count)
-            if cost <= mincost:
-                mincost = cost
-                splitloc = i
-
-        if splitloc:
-            # Virtual construction
-            self._analyses[construction] = SimpleConstrNode(count, (splitloc,))
-            prefix = construction[:splitloc]
-            suffix = construction[splitloc:]
-            self._modify_construction_count(prefix, count)
-            self._modify_construction_count(suffix, count)
-            if allowed_boundaries is None:
-                lp = self._recursive_split(prefix)
-                if suffix != prefix:
-                    return lp + self._recursive_split(suffix)
-                else:
-                    return lp + lp
-            else:
-                lp = self._recursive_split(
-                    prefix,
-                    [x for x in allowed_boundaries if x < splitloc])
-                ls = self._recursive_split(
-                    suffix,
-                    [x-splitloc for x in allowed_boundaries if x > splitloc])
-                return lp + ls
-        else:
-            # Real construction
-            self._analyses[construction] = SimpleConstrNode(0, tuple())
-            self._modify_construction_count(construction, count)
-            return [construction]
-
-    def _modify_construction_count(self, construction, dcount):
-        """Modify the count of construction by dcount.
-
-        For virtual constructions, recurses to child nodes in the
-        tree. For real constructions, adds/removes construction
-        to/from the lexicon whenever necessary.
-
-        """
-        if construction in self._analyses:
-            count, splitloc = self._analyses[construction]
-        else:
-            count, splitloc = 0, tuple()
-        newcount = count + dcount
-        if newcount == 0:
-            del self._analyses[construction]
-        else:
-            self._analyses[construction] = SimpleConstrNode(newcount, splitloc)
-        if splitloc:
-            # Virtual construction
-            children = splitloc_to_segmentation(construction, splitloc)
-            for child in children:
-                self._modify_construction_count(child, dcount)
-        else:
-            # Real construction
-            #_logger.debug("Updating corpus count: %s -> %s", count, newcount)
-            self._corpus_coding.update_count(construction, count, newcount)
-            if self._supervised:
-                self._annot_coding.update_count(construction, count, newcount)
-
-            if count == 0 and newcount > 0:
-                #_logger.debug("Adding to lex: %s", construction)
-                self._lexicon_coding.add(construction)
-            elif count > 0 and newcount == 0:
-                #_logger.debug("Removing from lex: %s", construction)
-                self._lexicon_coding.remove(construction)
-
-    def get_compounds(self):
-        """Return the compound types stored by the model."""
-        self._check_segment_only()
-        return self._compounds.keys()
-
-    def get_segmentations(self):
-        """Retrieve segmentations for all compounds encoded by the model."""
-        self._check_segment_only()
-        for compound in sorted(self._compounds.keys()):
-            count = self._compounds[compound].count
-            yield count, compound, self.segment(compound)
-
-    def set_restrictions(self, annotations, relaxed=None):
-        """Set segmentation restrictions from annotations.
-
-        Arguments:
-            annotations: iterator over annotations
-            relaxed: use relaxed restrictions with tuple of at most
-                       four integers (left, right, begin, end)
-
-        In relaxed restrictions, positions next to actual segmentation
-        points in annotations are allowed. The numbers "left" and
-        "right" give the range of allowed positions left and right of
-        the correct segmentation point. Begin and end give the range
-        of allowed positions in the beginning and end of the compound.
-
-        """
-        self._check_segment_only()
-        self._restricted = True
-        if relaxed:
-            if isinstance(relaxed, tuple) and len(relaxed) < 5:
-                left, right, begin, end = relaxed + (0,)*(4-len(relaxed))
-            else:
-                raise MorfessorException("Improper value for relaxed: %s"
-                                         % repr(relaxed))
-        else:
-            left, right, begin, end = (0, 0, 0, 0)
-        self.allowed_boundaries = {}
-        for compound in annotations:
-            allowed_positions = set()
-            for analysis in annotations[compound]:
-                for idx in segmentation_to_splitloc(analysis):
-                    assert(idx < len(compound))
-                    allowed_positions.add(idx)
-                    for ctx in range(left):
-                        if idx-ctx-1 > 0:
-                            allowed_positions.add(idx-ctx-1)
-                    for ctx in range(right):
-                        if idx+ctx+1 < len(compound):
-                            allowed_positions.add(idx+ctx+1)
-            for ctx in range(begin):
-                if ctx+1 < len(compound):
-                    allowed_positions.add(ctx+1)
-            for ctx in range(end):
-                if ctx+1 < len(compound):
-                    allowed_positions.add(len(compound)-ctx-1)
-            self.allowed_boundaries[compound] = sorted(allowed_positions)
-
-    def _segment(self, construction):
-        """Return real constructions of a potentially virtual construction.
-
-        Makes a recursive call on children of virtual constructions.
-
-        """
-        count, splitloc = self._analyses[construction]
-        constructions = []
-        if splitloc:
-            for child in splitloc_to_segmentation(construction, splitloc):
-                constructions += self._segment(child)
-        else:
-            constructions.append(construction)
-        return constructions
-
-    def segment(self, compound):
-        """Segment the compound by looking it up in the model analyses.
-
-        Raises KeyError if compound is not present in the training
-        data. For segmenting new words, use viterbi_segment(compound).
-
-        """
-        self._check_segment_only()
-        count, splitloc = self._compounds[compound]
-        constructions = []
-        if splitloc:
-            children = splitloc_to_segmentation(compound, splitloc)
-        else:
-            children = [compound]
-        for child in children:
-            constructions += self._segment(child)
-        return constructions
-
-    def make_segment_only(self):
-        """Reduce the size of this model by removing all non-morphs from the
-        analyses. After calling this method it is not possible anymore to call
-        any other method that would change the state of the model. Anyway
-        doing so would throw an exception.
-
-        """
-        super(RestrictedBaseline, self).make_segment_only()
-        self._compounds = {}
