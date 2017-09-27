@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
+from codecs import open
 from ez_setup import use_setuptools
 use_setuptools()
 
 from setuptools import setup
 
 import re
-main_py = open('morfessor/__init__.py').read()
+main_py = open('morfessor/__init__.py', encoding='utf-8').read()
 metadata = dict(re.findall("__([a-z]+)__ = '([^']+)'", main_py))
 
 requires = [
@@ -16,8 +17,8 @@ requires = [
 setup(name='Morfessor',
       version=metadata['version'],
       author=metadata['author'],
-      author_email='morfessor@cis.hut.fi',
-      url='http://www.cis.hut.fi/projects/morpho/',
+      author_email='morpho@aalto.fi',
+      url='http://morpho.aalto.fi',
       description='Morfessor',
       packages=['morfessor', 'morfessor.test'],
       classifiers=[

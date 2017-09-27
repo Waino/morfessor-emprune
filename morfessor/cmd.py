@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import locale
 import logging
 import math
@@ -20,7 +21,7 @@ from .io import MorfessorIO
 from .evaluation import MorfessorEvaluation, EvaluationConfig, \
     WilcoxonSignedRank, FORMAT_STRINGS
 
-PY3 = sys.version_info.major == 3
+PY3 = sys.version_info[0] == 3
 
 # _str is used to convert command line arguments to the right type (str for PY3, unicode for PY2
 if PY3:
@@ -40,7 +41,7 @@ def get_default_argparser():
         description="""
 Morfessor %s
 
-Copyright (c) 2012-2014, Sami Virpioja and Peter Smit
+Copyright (c) 2012-2017, Sami Virpioja, Peter Smit, and Stig-Arne Grönroos.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -751,7 +752,7 @@ def main_evaluation(args):
         results.append(result)
         print(result.format(f_string))
 
-    if len(results) > 1:
+    if len(results) > 1 and num_samples > 1:
         wsr = WilcoxonSignedRank()
         r = wsr.significance_test(results)
         WilcoxonSignedRank.print_table(r)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf-8
+# -*- coding: utf-8 -*-
 """
 Morfessor 2.0 - Python implementation of the Morfessor method
 """
@@ -10,9 +10,15 @@ __all__ = ['MorfessorException', 'ArgumentException', 'MorfessorIO',
            'BaselineModel', 'main', 'get_default_argparser', 'main_evaluation',
            'get_evaluation_argparser']
 
+<<<<<<< HEAD
 __version__ = '2.0.2alpha4'
 __author__ = 'Sami Virpioja, Peter Smit, Stig-Arne Grönroos'
 __author_email__ = "morfessor@cis.hut.fi"
+=======
+__version__ = '2.0.3'
+__author__ = 'Sami Virpioja, Peter Smit, Stig-Arne Grönroos'
+__author_email__ = "morpho@aalto.fi"
+>>>>>>> develop
 
 show_progress_bar = True
 
