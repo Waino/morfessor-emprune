@@ -36,7 +36,6 @@ class opts(dict):
 
 if __name__ == "__main__":
     o = opts()
-    o['progress'] = True
-
+    # o.verbose = 2
     morfessor.configure_logger(logging.getLogger(), o)
     main(sys.argv[1:])

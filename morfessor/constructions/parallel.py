@@ -74,8 +74,14 @@ class ParallelConstructionMethods(object):
 
     @staticmethod
     def lex_key(construction):
-        return construction.graphemes
+        a = []
+        a.extend(construction.graphemes)
+        a.extend(construction.phonemes)
+        return tuple(a)
 
     @staticmethod
     def atoms(construction):
-        return construction.graphemes
+        a = []
+        a.extend(construction.graphemes)
+        a.extend(construction.phonemes)
+        return tuple(a)

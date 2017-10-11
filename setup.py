@@ -20,7 +20,7 @@ setup(name='Morfessor',
       author_email='morpho@aalto.fi',
       url='http://morpho.aalto.fi',
       description='Morfessor',
-      packages=['morfessor', 'morfessor.test'],
+      packages=['morfessor', 'morfessor.test', 'morfessor.constructions'],
       classifiers=[
           'Development Status :: 4 - Beta',
           'Intended Audience :: Science/Research',

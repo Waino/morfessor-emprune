@@ -4,15 +4,14 @@ import heapq
 import itertools
 import logging
 import math
-import numbers
 import random
 
+import sys
+
 from .cost import Cost
-from .constructions.base import BaseConstructionMethods
-from .corpus import LexiconEncoding, CorpusEncoding, \
-    AnnotatedCorpusEncoding, FixedCorpusWeight
-from .utils import _progress, tail
+from morfessor.constructions.base import BaseConstructionMethods
 from .exception import MorfessorException, SegmentOnlyModelException
+from .utils import _progress, tail
 
 _logger = logging.getLogger(__name__)
 
@@ -341,8 +340,8 @@ class BaselineModel(object):
     def get_compounds(self):
         """Return the compound types stored by the model."""
         self._check_segment_only()
-        return [w for w, node in self._analyses.items()
-                if node.rcount > 0]
+        return sorted(w for w, node in self._analyses.items()
+                if node.rcount > 0)
 
     def get_constructions(self):
         """Return a list of the present constructions and their counts."""
