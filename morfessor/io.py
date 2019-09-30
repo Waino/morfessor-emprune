@@ -90,14 +90,14 @@ class MorfessorIO(object):
                 file_obj.write("%d %s\n" % (count, s))
         _logger.info("Done.")
 
-    def read_corpus_files(self, file_names):
+    def read_corpus_files(self, file_names, **kwargs):
         """Read one or more corpus files.
 
         Yield for each compound found (1, compound_atoms).
 
         """
         for file_name in file_names:
-            for item in self.read_corpus_file(file_name):
+            for item in self.read_corpus_file(file_name, **kwargs):
                 yield item
 
     def read_corpus_list_files(self, file_names):
@@ -110,7 +110,7 @@ class MorfessorIO(object):
             for item in self.read_corpus_list_file(file_name):
                 yield item
 
-    def read_corpus_file(self, file_name):
+    def read_corpus_file(self, file_name, retain_newlines=True):
         """Read one corpus file.
 
         For each compound, yield (1, compound_atoms).
@@ -122,7 +122,8 @@ class MorfessorIO(object):
             for compound in self.compound_sep_re.split(line):
                 if len(compound) > 0:
                     yield 1, self._split_atoms(compound)
-            yield 0, ()
+            if retain_newlines:
+                yield 0, ()
         _logger.info("Done.")
 
     def read_corpus_list_file(self, file_name):

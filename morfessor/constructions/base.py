@@ -77,3 +77,7 @@ class BaseConstructionMethods(object):
     @staticmethod
     def atoms(construction):
         return construction
+
+    @classmethod
+    def is_atom(cls, construction):
+        return len(cls.corpus_key(construction) == 1)
