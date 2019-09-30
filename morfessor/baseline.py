@@ -8,7 +8,7 @@ import random
 
 import sys
 
-from .cost import Cost
+from .cost import Cost, EmCost
 from morfessor.constructions.base import BaseConstructionMethods
 from .exception import MorfessorException, SegmentOnlyModelException
 from .utils import _progress, tail
@@ -23,6 +23,10 @@ _logger = logging.getLogger(__name__)
 ConstrNode = collections.namedtuple('ConstrNode',
                                     ['rcount', 'count', 'splitloc'])
 
+MODE_NORMAL = 'normal'
+MODE_EM = 'em'
+MODE_SEGMENT_ONLY = 'segment_only'
+
 
 class BaselineModel(object):
     """Morfessor Baseline model class.
@@ -35,7 +39,7 @@ class BaselineModel(object):
 
     penalty = -9999.9
 
-    def __init__(self, corpusweight=None, use_skips=False, constr_class=None):
+    def __init__(self, corpusweight=None, use_skips=False, constr_class=None, em=False):
         """Initialize a new model instance.
 
         Arguments:
@@ -46,6 +50,7 @@ class BaselineModel(object):
                          to speed up training
             nosplit_re: regular expression string for preventing splitting
                           in certain contexts
+            em: use em+prune training
 
         """
 
@@ -56,8 +61,8 @@ class BaselineModel(object):
         # have no split locations.
         self._analyses = {}
 
-        # Flag to indicate the model is only useful for segmentation
-        self._segment_only = False
+        # Flag to indicate the mode in which the model is operating
+        self._mode = MODE_EM if em else MODE_NORMAL
 
         # Cost variables
         # self._lexicon_coding = LexiconEncoding()
@@ -67,8 +72,14 @@ class BaselineModel(object):
         #Set corpus weight updater
         # self.set_corpus_weight_updater(corpusweight)
 
-        self.cost = Cost(self.cc, corpusweight)
+        if em:
+            self.cost = EmCost(self.cc, corpusweight)
+        else:
+            self.cost = Cost(self.cc, corpusweight)
 
+    @property
+    def _segment_only(self):
+        return self._mode == MODE_SEGMENT_ONLY
 
     @property
     def tokens(self):
@@ -84,9 +95,14 @@ class BaselineModel(object):
         if self._segment_only:
             raise SegmentOnlyModelException()
 
+    def _check_normal_mode(self):
+        if not self._mode == MODE_NORMAL:
+            raise Exception('Model must be in normal mode')
+
     def _epoch_checks(self):
         """Apply per epoch checks"""
         # self._check_integrity()
+        pass
 
     def _epoch_update(self, epoch_num):
         """Do model updates that are necessary between training epochs.
@@ -171,6 +187,7 @@ class BaselineModel(object):
 
     def _remove(self, construction):
         """Remove construction from model."""
+        self._check_normal_mode()
         rcount, count, splitloc = self._analyses[construction]
         self._modify_construction_count(construction, -count)
         return rcount, count
@@ -187,6 +204,7 @@ class BaselineModel(object):
             parts: desired constructions of the compound
 
         """
+        self._check_normal_mode()
         parts = list(parts)
         if len(parts) == 1:
             rcount, count = self._remove(compound)
@@ -202,14 +220,7 @@ class BaselineModel(object):
 
     def get_construction_count(self, construction):
         """Return (real) count of the construction."""
-        if (construction in self._analyses and
-            not self._analyses[construction].splitloc):
-            count = self._analyses[construction].count
-            if count <= 0:
-                raise MorfessorException("Construction count of '%s' is %s"
-                                         % (construction, count))
-            return count
-        return 0
+        return self.cost.counts.get(construction, 0)
 
     def _test_skip(self, construction):
         """Return true if construction should be skipped."""
@@ -231,6 +242,7 @@ class BaselineModel(object):
         Returns list of segments.
 
         """
+        self._check_normal_mode()
         if self._use_skips and self._test_skip(compound):
             return self.segment(compound)
 
@@ -248,6 +260,7 @@ class BaselineModel(object):
         Returns list of segments.
 
         """
+        self._check_normal_mode()
         # if self._use_skips and self._test_skip(compound):
         #     return self.segment(compound)
         # Collect forced subsegments
@@ -359,7 +372,7 @@ class BaselineModel(object):
 
     def get_segmentations(self):
         """Retrieve segmentations for all compounds encoded by the model."""
-        self._check_segment_only()
+        self._check_normal_mode()
         for w in sorted(self._analyses.keys()):
             c = self._analyses[w].rcount
             if c > 0:
@@ -389,7 +402,7 @@ class BaselineModel(object):
         data. For segmenting new words, use viterbi_segment(compound).
 
         """
-        self._check_segment_only()
+        self._check_normal_mode()
         _, _, splitloc = self._analyses[compound]
         constructions = []
         if splitloc:
@@ -422,6 +435,7 @@ class BaselineModel(object):
             max_epochs: maximum number of epochs to train
 
         """
+        self._check_normal_mode()
         epochs = 0
         forced_epochs = max(1, self._epoch_update(epochs))
         newcost = self.get_cost()
@@ -510,7 +524,7 @@ class BaselineModel(object):
             max_epochs: maximum number of epochs to train
 
         """
-        self._check_segment_only()
+        self._check_normal_mode()
         if count_modifier is not None:
             counts = {}
 
@@ -794,6 +808,7 @@ class BaselineModel(object):
         doing so would throw an exception.
 
         """
+        self._check_normal_mode()
         self._num_compounds = len(self.get_compounds())
         self._segment_only = True
 
@@ -801,6 +816,7 @@ class BaselineModel(object):
                           if not v.splitloc}
 
     def clear_segmentation(self):
+        self._check_normal_mode()
         for compound in self.get_compounds():
             self._clear_compound_analysis(compound)
             self._set_compound_analysis(compound, [compound])

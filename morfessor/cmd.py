@@ -181,6 +181,9 @@ Interactive use (read corpus from user):
             ("algorithm type (%(choices)s); "
              "repeat for sequential training with "
              "multiple algorithms (default 'recursive')"))
+    add_arg('--em-prune', default=False, action='store_true',
+            help='Use Expectation-Maximization + pruning. '
+            'Algorithms specified with -a are ignored.')
     add_arg('-d', '--dampening', dest="dampening", type=_str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
@@ -388,7 +391,8 @@ def main(args):
             else RestrictedBaseline
         model = modelclass(corpusweight=args.corpusweight,
                            use_skips=args.skips,
-                           constr_class=constr_class
+                           constr_class=constr_class,
+                           em=args.em_prune
                            )
 
     if args.loadsegfile is not None:
