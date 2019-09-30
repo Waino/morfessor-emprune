@@ -95,4 +95,6 @@ class Cost(object):
         return self._lexicon_coding.get_codelength(compound) / self._corpus_coding.weight
 
 class EmCost(Cost):
-    pass
+    def load_lexicon(self, substr_lexicon):
+        for count, substr in substr_lexicon:
+            self.update(substr, count)

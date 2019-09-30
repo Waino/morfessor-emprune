@@ -183,8 +183,9 @@ Interactive use (read corpus from user):
             ("algorithm type (%(choices)s); "
              "repeat for sequential training with "
              "multiple algorithms (default 'recursive')"))
-    add_arg('--em-prune', default=False, action='store_true',
+    add_arg('--em-prune', type=str, default=None, metavar='<substr_file>',
             help='Use Expectation-Maximization + pruning. '
+            'Load initial substring lexicon from specified file. '
             'Algorithms specified with -a are ignored.')
     add_arg('-d', '--dampening', dest="dampening", type=_str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
@@ -370,7 +371,8 @@ def main(args):
 
     if (args.loadfile is None and
             args.loadsegfile is None and
-            len(args.trainfiles) == 0):
+            len(args.trainfiles) == 0 and
+            args.em_prune is None):
         raise ArgumentException("either model file or training data should "
                                 "be defined")
 
@@ -383,6 +385,12 @@ def main(args):
                      lowercase=args.lowercase)
 
     constr_class = BaseConstructionMethods(force_splits=args.forcesplit, nosplit_re=args.nosplit)
+    
+    if args.em_prune is not None:
+        em_substr = io.read_segmentation_file(args.em_prune)
+        em_substr = [(count, substr) for (count, substr, _) in em_substr]
+    else:
+        em_substr = None
 
     # Load exisiting model or create a new one
     if args.loadfile is not None:
@@ -394,7 +402,8 @@ def main(args):
         model = modelclass(corpusweight=args.corpusweight,
                            use_skips=args.skips,
                            constr_class=constr_class,
-                           em=args.em_prune
+                           use_em=args.em_prune is not None,
+                           em_substr=em_substr
                            )
 
     if args.loadsegfile is not None:
@@ -508,9 +517,12 @@ def main(args):
             _logger.info("Training time: %.3fs", (te - ts))
     elif len(args.trainfiles) > 0:
         ts = time.time()
-        if args.trainmode == 'init':
+        if args.em_prune is not None:
+            _logger.info("Batch training with em+prune algorithm")
             c = model.load_data(data)
-
+            e, c = model.train_em_prune()   # FIXME: params
+        elif args.trainmode == 'init':
+            c = model.load_data(data)
         elif args.trainmode == 'init+batch':
             c = model.load_data(data)
             for alg, algp in zip(args.algorithms, algparams):
@@ -575,6 +587,7 @@ def main(args):
     if args.savefile is not None:
         io.write_binary_model_file(args.savefile, model)
 
+    # FIXME: save em-prune trained model as "segmentation" or "lexicon" or new param?
     if args.savesegfile is not None:
         io.write_segmentation_file(args.savesegfile, model.get_segmentations())
 

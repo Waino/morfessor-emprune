@@ -37,6 +37,7 @@ setup(name='Morfessor',
                'scripts/tune_tokensync.py',
                'scripts/tune_tokensync_init.py',
                'scripts/tune_tokensync_pseudocounts.py',
+               'scripts/freq_substr.py',
                ],
       install_requires=requires,
       extras_require={

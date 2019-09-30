@@ -4,8 +4,8 @@ import heapq
 import itertools
 import logging
 import math
+import numbers
 import random
-
 import sys
 
 from .cost import Cost, EmCost
@@ -41,7 +41,8 @@ class BaselineModel(object):
 
     penalty = -9999.9
 
-    def __init__(self, corpusweight=None, use_skips=False, constr_class=None, em=False):
+    def __init__(self, corpusweight=None, use_skips=False, constr_class=None,
+                 use_em=False, em_substr=None):
         """Initialize a new model instance.
 
         Arguments:
@@ -52,7 +53,8 @@ class BaselineModel(object):
                          to speed up training
             nosplit_re: regular expression string for preventing splitting
                           in certain contexts
-            em: use em+prune training
+            use_em: use em+prune training
+            em_substr: substring lexicon
 
         """
 
@@ -64,15 +66,16 @@ class BaselineModel(object):
         self._analyses = {}
 
         # Flag to indicate the mode in which the model is operating
-        self._mode = MODE_EM if em else MODE_NORMAL
+        self._mode = MODE_EM if use_em else MODE_NORMAL
 
         # Cost variables
         # self._lexicon_coding = LexiconEncoding()
         # self._corpus_coding = CorpusEncoding(self._lexicon_coding)
         # self._annot_coding = None
 
-        if em:
+        if use_em:
             self.cost = EmCost(self.cc, corpusweight)
+            self.cost.load_lexicon(em_substr)
         else:
             self.cost = Cost(self.cc, corpusweight)
 
@@ -404,8 +407,9 @@ class BaselineModel(object):
         self._check_segment_only()
         for dp in data:
             self._add_compound(dp.compound, dp.count)
-            self._clear_compound_analysis(dp.compound)
-            self._set_compound_analysis(dp.compound, self.cc.splitn(dp.compound, dp.splitlocs))
+            if self._mode == MODE_NORMAL:
+                self._clear_compound_analysis(dp.compound)
+                self._set_compound_analysis(dp.compound, self.cc.splitn(dp.compound, dp.splitlocs))
         return self.get_cost()
 
     # FIXME: refactor?
@@ -435,6 +439,15 @@ class BaselineModel(object):
             constructions.append(compound)
 
         return constructions
+
+    def train_em_prune(self, max_epochs=5, sub_epochs=3):
+        for epoch in range(max_epochs):
+            for sub_epoch in range(sub_epochs):
+                # E-step
+                # M-step
+                pass
+            # prune lexicon
+        pass
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     finish_threshold=0.005, max_epochs=None):
@@ -667,9 +680,10 @@ class BaselineModel(object):
         constructions = list(self.cc.splitn(compound, list(reversed(splitlocs))))
 
         # Add boundary cost
-        cost += (math.log(self.cost.tokens() +
-                          self.cost.compound_tokens()) -
-                 math.log(self.cost.compound_tokens()))
+        if self._mode == MODE_NORMAL:
+            cost += (math.log(self.cost.tokens() +
+                            self.cost.compound_tokens()) -
+                    math.log(self.cost.compound_tokens()))
         return constructions, cost
 
     #TODO project lambda
