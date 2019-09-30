@@ -12,7 +12,7 @@ from .cost import Cost, EmCost
 from .constructions.base import BaseConstructionMethods
 from .corpus import LexiconEncoding, CorpusEncoding, \
     AnnotatedCorpusEncoding, FixedCorpusWeight
-from .utils import _progress, tail
+from .utils import _progress, tail, logsumexp
 from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
@@ -684,6 +684,60 @@ class BaselineModel(object):
             cost += (math.log(self.cost.tokens() +
                             self.cost.compound_tokens()) -
                     math.log(self.cost.compound_tokens()))
+        return constructions, cost
+
+    def sample_segment(self, compound, theta=0.5, maxlen=30):
+        """Sample a segmentation using the
+        Forward-filter Backward-sample algorithm.
+
+        Arguments:
+          compound: compound to be segmented
+          maxlen: maximum length for the constructions
+
+        Returns the sampled segmentation and its log-probability.
+
+        """
+        grid = {None: (0.0, None)}
+        tokens = self.cost.all_tokens()
+        logtokens = math.log(tokens) if tokens > 0 else 0
+
+        badlikelihood = self.cost.bad_likelihood(compound, 0)
+
+        ## Forward pass
+        for t in itertools.chain(self.cc.split_locations(compound), [None]):
+            # logsum of all paths to current node.
+            # Note that we can come from any node in history.
+            negcosts = []
+
+            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+                if grid[pt][0] is None:
+                    continue
+                cost = grid[pt][0]
+                construction = self.cc.slice(compound, pt, t)
+                count = self.get_construction_count(construction)
+                if count > 0:
+                    cost += (logtokens - math.log(count))
+                elif self.cc.is_atom(construction):
+                    cost += badlikelihood
+                else:
+                    continue
+                #_logger.debug("cost(%s)=%.2f", construction, cost)
+                negcosts.append(-cost * theta)
+            totcost = -logsumexp(negcosts)
+            grid[t] = (totcost, None)
+
+        ## Backward pass
+        splitlocs = []
+        # t set to last timestep by previous loop
+        while t > 0:
+            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+                if grid[pt][0] is None:
+                    continue
+                cost = grid[pt][0]
+                # FIXME: normalize
+
+        constructions = list(self.cc.splitn(compound, list(reversed(splitlocs))))
+
         return constructions, cost
 
     #TODO project lambda

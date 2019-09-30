@@ -19,6 +19,11 @@ def zlog(x):
         return LOGPROB_ZERO
     return -math.log(x)
 
+def logsumexp(xs):
+    """Compute the log of the sum of exponentials of input elements.
+    Could be refactored using repeated np.logaddexp"""
+    max_x = max(xs)
+    return (-zlog(sum(math.exp(x - max_x) for x in xs)) + max_x)
 
 # Progress bar for generators (length unknown):
 # Print a dot for every GENERATOR_DOT_FREQ:th dot.
