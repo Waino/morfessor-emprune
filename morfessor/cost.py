@@ -59,11 +59,20 @@ class Cost(object):
         if self.counts[construction] == 0:
             self._lexicon_coding.remove(self.cc.lex_key(construction))
 
+    def update_boundaries(self, compound, delta):
+        self._corpus_coding.boundaries += delta
+
     def coding_length(self, construction):
         pass
 
     def tokens(self):
-        pass
+        return self._corpus_coding.tokens
+
+    def compound_tokens(self):
+        return self._corpus_coding.boundaries
+
+    def types(self):
+        return self._lexicon.coding.boundaries
 
     def all_tokens(self):
         return self._corpus_coding.tokens + self._corpus_coding.boundaries
@@ -81,9 +90,6 @@ class Cost(object):
         return 1.0 + len(self.cc.corpus_key(compound)) * lt + nb + \
                         self._lexicon_coding.get_codelength(compound) / \
                         self._corpus_coding.weight
-
-    def types(self):
-        pass
 
     def get_coding_cost(self, compound):
         return self._lexicon_coding.get_codelength(compound) / self._corpus_coding.weight

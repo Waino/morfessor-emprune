@@ -9,7 +9,7 @@ def merge_counts(data):
     store = {}
     for dp in data:
         if dp.compound in store:
-            store[dp.compound] = dp._replace(count=store[dp.compound].count + dp.cout)
+            store[dp.compound] = dp._replace(count=store[dp.compound].count + dp.count)
         else:
             store[dp.compound] = dp
 
@@ -29,7 +29,7 @@ def freq_threshold(data, threshold, online=False):
     else:
         for dp in data:
             if dp.count >= threshold:
-                yield dp.count
+                yield dp
 
 
 def count_modifier(data, modifier, online=False):

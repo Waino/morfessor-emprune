@@ -4,14 +4,17 @@ import heapq
 import itertools
 import logging
 import math
+import numbers
 import random
 
 import sys
 
 from .cost import Cost
-from morfessor.constructions.base import BaseConstructionMethods
-from .exception import MorfessorException, SegmentOnlyModelException
+from .constructions.base import BaseConstructionMethods
+from .corpus import LexiconEncoding, CorpusEncoding, \
+    AnnotatedCorpusEncoding, FixedCorpusWeight
 from .utils import _progress, tail
+from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
 
@@ -64,11 +67,20 @@ class BaselineModel(object):
         # self._corpus_coding = CorpusEncoding(self._lexicon_coding)
         # self._annot_coding = None
 
-        #Set corpus weight updater
-        # self.set_corpus_weight_updater(corpusweight)
-
         self.cost = Cost(self.cc, corpusweight)
 
+        #Set corpus weight updater
+        self.set_corpus_weight_updater(corpusweight)
+
+    def set_corpus_weight_updater(self, corpus_weight):
+        if corpus_weight is None:
+            self._corpus_weight_updater = FixedCorpusWeight(1.0)
+        elif isinstance(corpus_weight, numbers.Number):
+            self._corpus_weight_updater = FixedCorpusWeight(corpus_weight)
+        else:
+            self._corpus_weight_updater = corpus_weight
+
+        self._corpus_weight_updater.update(self, 0)
 
     @property
     def tokens(self):
@@ -105,8 +117,9 @@ class BaselineModel(object):
 
         """
         forced_epochs = 0
-        if self.cost._corpus_weight_updater.update(self, epoch_num):
-            forced_epochs += 2
+        if self._corpus_weight_updater is not None:
+            if self._corpus_weight_updater.update(self, epoch_num):
+                forced_epochs += 2
 
         # if self._use_skips:
         #     self._counter = collections.Counter()
@@ -163,7 +176,7 @@ class BaselineModel(object):
 
     def _add_compound(self, compound, c):
         """Add compound with count c to data."""
-        self.cost._corpus_coding.boundaries += c
+        self.cost.update_boundaries(compound, c)
         self._modify_construction_count(compound, c)
         oldrc = self._analyses[compound].rcount
         self._analyses[compound] = \
@@ -316,6 +329,8 @@ class BaselineModel(object):
         to/from the lexicon whenever necessary.
 
         """
+        if dcount == 0 or construction is None:
+            return
         if construction in self._analyses:
             rcount, count, splitloc = self._analyses[construction]
         else:
@@ -340,8 +355,8 @@ class BaselineModel(object):
     def get_compounds(self):
         """Return the compound types stored by the model."""
         self._check_segment_only()
-        return sorted(w for w, node in self._analyses.items()
-                if node.rcount > 0)
+        return [w for w, node in self._analyses.items()
+                if node.rcount > 0]
 
     def get_constructions(self):
         """Return a list of the present constructions and their counts."""
@@ -380,6 +395,16 @@ class BaselineModel(object):
             self._add_compound(dp.compound, dp.count)
             self._clear_compound_analysis(dp.compound)
             self._set_compound_analysis(dp.compound, self.cc.splitn(dp.compound, dp.splitlocs))
+        return self.get_cost()
+
+    # FIXME: refactor?
+    def load_segmentations(self, segmentations):
+        self._check_segment_only()
+        for count, compound, constructions in segmentations:
+            splitlocs = tuple(self.cc.parts_to_splitlocs(constructions))
+            self._add_compound(compound, count)
+            self._clear_compound_analysis(compound)
+            self._set_compound_analysis(compound, self.cc.splitn(compound, splitlocs))
         return self.get_cost()
 
     def segment(self, compound):
@@ -427,7 +452,7 @@ class BaselineModel(object):
         newcost = self.get_cost()
         compounds = list(self.get_compounds())
         _logger.info("Compounds in training data: %s types / %s tokens" %
-                     (len(compounds), self.cost._corpus_coding.boundaries))
+                     (len(compounds), self.cost.compound_tokens()))
 
         if algorithm == 'flatten':
             _logger.info("Flattening analysis tree")
@@ -467,7 +492,7 @@ class BaselineModel(object):
             _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
             if (forced_epochs == 0 and
                     newcost >= oldcost - finish_threshold *
-                    self.cost._corpus_coding.boundaries):
+                    self.cost.compound_tokens()):
                 break
             if forced_epochs > 0:
                 forced_epochs -= 1
@@ -599,14 +624,14 @@ class BaselineModel(object):
                 if count > 0:
                     cost += (logtokens - math.log(count + addcount))
                 elif addcount > 0:
-                    if self.cost._corpus_coding.tokens == 0:
+                    if self.cost.tokens() == 0:
                         cost += (addcount * math.log(addcount) +
                                  newboundcost + self.cost.get_coding_cost(construction))
                     else:
                         cost += (logtokens - math.log(addcount) +
                                  newboundcost + self.cost.get_coding_cost(construction))
 
-                elif len(self.cc.corpus_key(construction)) == 1:
+                elif self.cc.is_atom(construction):
                     cost += badlikelihood
                 elif allow_longer_unk_splits:
                     # Some splits are forbidden, so longer unknown
@@ -627,12 +652,12 @@ class BaselineModel(object):
             splitlocs.append(path)
             path = grid[path][1]
 
-        constructions = list(self.cc.splitn(compound, reversed(splitlocs)))
+        constructions = list(self.cc.splitn(compound, list(reversed(splitlocs))))
 
         # Add boundary cost
-        cost += (math.log(self.cost._corpus_coding.tokens +
-                          self.cost._corpus_coding.boundaries) -
-                 math.log(self.cost._corpus_coding.boundaries))
+        cost += (math.log(self.cost.tokens() +
+                          self.cost.compound_tokens()) -
+                 math.log(self.cost.compound_tokens()))
         return constructions, cost
 
     #TODO project lambda
@@ -785,7 +810,7 @@ class BaselineModel(object):
 
     def set_corpus_coding_weight(self, weight):
         self._check_segment_only()
-        self.cost._corpus_coding.weight = weight
+        self.cost.set_corpus_coding_weight(weight)
 
     def make_segment_only(self):
         """Reduce the size of this model by removing all non-morphs from the
@@ -805,6 +830,15 @@ class BaselineModel(object):
             self._clear_compound_analysis(compound)
             self._set_compound_analysis(compound, [compound])
 
+    def get_params(self):
+        """Returns a dict of hyperparameters."""
+        params = {'corpusweight': self.get_corpus_coding_weight()}
+        #if self._supervised:
+        #    params['annotationweight'] = self._annot_coding.weight
+        params['forcesplit'] = ''.join(sorted(self.cc._force_splits))
+        if self.cc._nosplit:
+            params['nosplit'] = self.cc._nosplit.pattern
+        return params
 
 # count = count of the node
 # splitloc = integer or tuple. Location(s) of the possible splits for virtual
