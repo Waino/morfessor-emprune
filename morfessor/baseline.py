@@ -449,10 +449,12 @@ class BaselineModel(object):
     def e_step(self, maxlen):
         expected = collections.Counter()
         compounds = list(self.get_compound_counts())
+        tot_cost = 0
         for compound, freq in compounds:
-            w_expected = self.forward_backward(compound, freq, maxlen)
+            w_expected, cost = self.forward_backward(compound, freq, maxlen)
             expected.update(w_expected)
-        return expected
+            tot_cost += cost
+        return expected, tot_cost
 
     def m_step(self, expected, expected_freq_threshold):
         # prune out infrequent
@@ -472,13 +474,15 @@ class BaselineModel(object):
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
-                expected = self.e_step(maxlen=maxlen)
+                expected, cost = self.e_step(maxlen=maxlen)
+                _logger.info("E-step cost: %s" % cost)
                 # M-step
                 self.m_step(
                     expected,
                     expected_freq_threshold=expected_freq_threshold)
             # prune lexicon
             # FIXME
+        return epoch, cost
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     finish_threshold=0.005, max_epochs=None):
@@ -822,9 +826,9 @@ class BaselineModel(object):
             grid_alpha[t] = (totcost, None)
 
         ## Backward pass
-        for t in itertools.chain([None], reversed(self.cc.split_locations(compound))):
-            for pt in itertools.head(
-                    maxlen, itertools.chain(self.cc.split_locations(compound, start=t), [None])):
+        for t in itertools.chain(reversed(list(self.cc.split_locations(compound))), [None]):
+            for pt in itertools.islice(
+                    itertools.chain(self.cc.split_locations(compound, start=t), [None]), maxlen):
                 if grid_beta[pt][0] is None:
                     continue
                 cost = grid_beta[pt][0]
@@ -842,7 +846,7 @@ class BaselineModel(object):
 
         ## Merge pass
         w_expected = collections.Counter()
-        totcost = grid[None][0]
+        totcost = grid_alpha[None][0]
         for t in itertools.chain(self.cc.split_locations(compound), [None]):
             for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
                 if grid_alpha[pt][0] is None:
