@@ -372,6 +372,12 @@ class BaselineModel(object):
         return [w for w, node in self._analyses.items()
                 if node.rcount > 0]
 
+    def get_compound_counts(self):
+        """Return the compound types stored by the model."""
+        self._check_segment_only()
+        return [(w, node.rcount) for (w, node) in self._analyses.items()
+                if node.rcount > 0]
+
     def get_constructions(self):
         """Return a list of the present constructions and their counts."""
         return sorted((c, node.count) for c, node in self._analyses.items()
@@ -440,14 +446,39 @@ class BaselineModel(object):
 
         return constructions
 
-    def train_em_prune(self, max_epochs=5, sub_epochs=3):
+    def e_step(self, maxlen):
+        expected = collections.Counter()
+        compounds = list(self.get_compound_counts())
+        for compound, freq in compounds:
+            w_expected = self.forward_backward(compound, freq, maxlen)
+            expected.update(w_expected)
+        return expected
+
+    def m_step(self, expected, expected_freq_threshold):
+        # prune out infrequent
+        expected = collections.Counter(
+            dict((w, c) for (w, c) in expected.items()
+                 if c > expected_freq_threshold))
+
+        # apply digamma for Bayesianified/DPified EM
+        # FIXME
+
+        # set model parameters
+        self.cost.counts = expected
+
+    def train_em_prune(self, max_epochs=5, sub_epochs=3,
+                       expected_freq_threshold=0.5,
+                       maxlen=30):
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
+                expected = self.e_step(maxlen=maxlen)
                 # M-step
-                pass
+                self.m_step(
+                    expected,
+                    expected_freq_threshold=expected_freq_threshold)
             # prune lexicon
-        pass
+            # FIXME
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     finish_threshold=0.005, max_epochs=None):
@@ -756,6 +787,80 @@ class BaselineModel(object):
         constructions = list(self.cc.splitn(compound, list(reversed(splitlocs))))
 
         return constructions, cost
+
+    def forward_backward(self, compound, freq, maxlen=30):
+        grid_alpha = {0: (0.0, None), None: (0.0, None)}
+        grid_beta = {0: (0.0, None), None: (0.0, None)}
+        tokens = self.cost.all_tokens()
+        logtokens = math.log(tokens) if tokens > 0 else 0
+
+        badlikelihood = self.cost.bad_likelihood(compound, 0)
+
+        # refactor: only compute morph cost once
+
+        ## Forward pass
+        for t in itertools.chain(self.cc.split_locations(compound), [None]):
+            # logsum of all paths to current node.
+            # Note that we can come from any node in history.
+            negcosts = []
+
+            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+                if grid_alpha[pt][0] is None:
+                    continue
+                cost = grid_alpha[pt][0]
+                construction = self.cc.slice(compound, pt, t)
+                count = self.get_construction_count(construction)
+                if count > 0:
+                    cost += (logtokens - math.log(count))
+                elif self.cc.is_atom(construction):
+                    cost += badlikelihood
+                else:
+                    continue
+                #_logger.debug("cost(%s)=%.2f", construction, cost)
+                negcosts.append(-cost)
+            totcost = -logsumexp(negcosts)
+            grid_alpha[t] = (totcost, None)
+
+        ## Backward pass
+        for t in itertools.chain([None], reversed(self.cc.split_locations(compound))):
+            for pt in itertools.head(
+                    maxlen, itertools.chain(self.cc.split_locations(compound, start=t), [None])):
+                if grid_beta[pt][0] is None:
+                    continue
+                cost = grid_beta[pt][0]
+                construction = self.cc.slice(compound, t, pt)
+                count = self.get_construction_count(construction)
+                if count > 0:
+                    cost += (logtokens - math.log(count))
+                elif self.cc.is_atom(construction):
+                    cost += badlikelihood
+                else:
+                    continue
+                negcosts.append(-cost)
+            totcost = -logsumexp(negcosts)
+            grid_beta[t] = (totcost, None)
+
+        ## Merge pass
+        w_expected = collections.Counter()
+        totcost = grid[None][0]
+        for t in itertools.chain(self.cc.split_locations(compound), [None]):
+            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+                if grid_alpha[pt][0] is None:
+                    continue
+                if grid_beta[pt][0] is None:
+                    continue
+                construction = self.cc.slice(compound, pt, t)
+                count = self.get_construction_count(construction)
+                if count > 0:
+                    cost += (logtokens - math.log(count))
+                elif self.cc.is_atom(construction):
+                    cost += badlikelihood
+                else:
+                    continue
+                w_expected[construction] += freq * math.exp(
+                    grid_alpha[pt][0] + grid_beta[pt][0] + cost - totcost)
+
+        return w_expected, totcost
 
     #TODO project lambda
     def forward_logprob(self, compound):
