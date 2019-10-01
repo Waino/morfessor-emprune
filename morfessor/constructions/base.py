@@ -80,4 +80,4 @@ class BaseConstructionMethods(object):
 
     @classmethod
     def is_atom(cls, construction):
-        return len(cls.corpus_key(construction) == 1)
+        return len(cls.corpus_key(construction)) == 1

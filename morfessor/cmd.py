@@ -125,6 +125,10 @@ Interactive use (read corpus from user):
             help='Save hyperparameters to file. ')
     add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
             help="output n-best viterbi results")
+    add_arg('--sample', dest="sample", default=False, action='store_true',
+            help='Use sampling instead of viterbi segmentation. ')
+    add_arg('--sampling-temperature', dest="sampling_theta", default=0.5, type=float, metavar='<float>',
+            help='Temperature parameter for sampling')
 
     # Options for data formats
     add_arg = parser.add_argument_group(
@@ -629,7 +633,15 @@ def main(args):
                     clogprob = model.forward_logprob(atoms)
                 else:
                     clogprob = 0
-                if args.nbest > 1:
+                if args.sample:
+                    constructions, logp = model.sample_segment(
+                        atoms, theta=args.sampling_theta, maxlen=args.viterbimaxlen)
+                    analysis = io.format_constructions(constructions, csep=csep)
+                    fobj.write(outformat.format(analysis=analysis,
+                                                compound=compound,
+                                                count=count, logprob=logp,
+                                                clogprob=clogprob))
+                elif args.nbest > 1:
                     nbestlist = model.viterbi_nbest(atoms, args.nbest,
                                                     args.viterbismooth,
                                                     args.viterbimaxlen)

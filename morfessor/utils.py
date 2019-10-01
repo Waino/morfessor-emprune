@@ -7,6 +7,7 @@ import math
 import random
 import sys
 import types
+import numpy as np
 
 import collections
 
@@ -24,6 +25,14 @@ def logsumexp(xs):
     Could be refactored using repeated np.logaddexp"""
     max_x = max(xs)
     return (-zlog(sum(math.exp(x - max_x) for x in xs)) + max_x)
+
+def categorical(values, p):
+    """Draw a sample from a categorical distribution"""
+    # FIXME: refactor without numpy
+    norm = sum(p)
+    p = [x / norm for x in p]
+    return np.random.choice(values, p=p)
+
 
 # Progress bar for generators (length unknown):
 # Print a dot for every GENERATOR_DOT_FREQ:th dot.

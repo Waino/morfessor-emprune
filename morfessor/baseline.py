@@ -12,7 +12,7 @@ from .cost import Cost, EmCost
 from .constructions.base import BaseConstructionMethods
 from .corpus import LexiconEncoding, CorpusEncoding, \
     AnnotatedCorpusEncoding, FixedCorpusWeight
-from .utils import _progress, tail, logsumexp
+from .utils import _progress, tail, logsumexp, categorical
 from .exception import MorfessorException, SegmentOnlyModelException
 
 _logger = logging.getLogger(__name__)
@@ -697,13 +697,13 @@ class BaselineModel(object):
         Returns the sampled segmentation and its log-probability.
 
         """
-        grid = {None: (0.0, None)}
+        grid = {0: (0.0, None), None: (0.0, None)}
         tokens = self.cost.all_tokens()
         logtokens = math.log(tokens) if tokens > 0 else 0
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
 
-        ## Forward pass
+        ## Forward filtering pass
         for t in itertools.chain(self.cc.split_locations(compound), [None]):
             # logsum of all paths to current node.
             # Note that we can come from any node in history.
@@ -726,15 +726,32 @@ class BaselineModel(object):
             totcost = -logsumexp(negcosts)
             grid[t] = (totcost, None)
 
-        ## Backward pass
+        ## Backward sampling pass
         splitlocs = []
-        # t set to last timestep by previous loop
-        while t > 0:
-            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+        t = max(key for key in grid.keys() if key is not None) + 1
+        totcost = grid[None][0]
+        while t is not None:
+            pts = []
+            probs = []
+            for pt in tail(maxlen, itertools.chain([0], self.cc.split_locations(compound, stop=t))):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
-                # FIXME: normalize
+                pt = None if pt == 0 else pt
+                construction = self.cc.slice(compound, pt, t)
+                count = self.get_construction_count(construction)
+                if count > 0:
+                    cost += theta * (logtokens - math.log(count) - totcost)
+                elif self.cc.is_atom(construction):
+                    cost += badlikelihood
+                else:
+                    continue
+                pts.append(pt)
+                probs.append(math.exp(-cost))
+            sample = categorical(pts, probs)
+            if sample is not None:
+                splitlocs.append(sample)
+            t = sample
 
         constructions = list(self.cc.splitn(compound, list(reversed(splitlocs))))
 
