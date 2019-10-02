@@ -94,7 +94,18 @@ class Cost(object):
     def get_coding_cost(self, compound):
         return self._lexicon_coding.get_codelength(compound) / self._corpus_coding.weight
 
+
 class EmCost(Cost):
     def load_lexicon(self, substr_lexicon):
         for count, substr in substr_lexicon:
             self.update(substr, count)
+
+    def tokens(self):
+        toks = sum(self.counts.values())
+        return toks
+
+    def compound_tokens(self):
+        return self._corpus_coding.boundaries
+
+    def all_tokens(self):
+        return self.tokens() + self._corpus_coding.boundaries

@@ -458,9 +458,10 @@ class BaselineModel(object):
 
     def m_step(self, expected, expected_freq_threshold):
         # prune out infrequent
-        expected = collections.Counter(
-            dict((w, c) for (w, c) in expected.items()
-                 if c > expected_freq_threshold))
+        # FIXME: tempoarily disabled this pruning
+        #expected = collections.Counter(
+        #    dict((w, c) for (w, c) in expected.items()
+        #         if c > expected_freq_threshold or len(w) == 1))
 
         # apply digamma for Bayesianified/DPified EM
         # FIXME
@@ -475,7 +476,7 @@ class BaselineModel(object):
             for sub_epoch in range(sub_epochs):
                 # E-step
                 expected, cost = self.e_step(maxlen=maxlen)
-                _logger.info("E-step cost: %s" % cost)
+                _logger.info("E-step cost: %s tokens: %s" % (cost, self.cost.all_tokens()))
                 # M-step
                 self.m_step(
                     expected,
@@ -793,76 +794,78 @@ class BaselineModel(object):
         return constructions, cost
 
     def forward_backward(self, compound, freq, maxlen=30):
-        grid_alpha = {0: (0.0, None), None: (0.0, None)}
-        grid_beta = {0: (0.0, None), None: (0.0, None)}
+        grid_alpha = {'start': (0.0, None)}
+        grid_beta = {'stop': (0.0, None)}
         tokens = self.cost.all_tokens()
         logtokens = math.log(tokens) if tokens > 0 else 0
 
+        local_morph_costs = {}
+
         badlikelihood = self.cost.bad_likelihood(compound, 0)
 
-        # refactor: only compute morph cost once
-
         ## Forward pass
-        for t in itertools.chain(self.cc.split_locations(compound), [None]):
+        for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
             # logsum of all paths to current node.
             # Note that we can come from any node in history.
             negcosts = []
 
-            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+            for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
                 if grid_alpha[pt][0] is None:
                     continue
-                cost = grid_alpha[pt][0]
                 construction = self.cc.slice(compound, pt, t)
-                count = self.get_construction_count(construction)
-                if count > 0:
-                    cost += (logtokens - math.log(count))
-                elif self.cc.is_atom(construction):
-                    cost += badlikelihood
-                else:
+                if construction not in local_morph_costs:
+                    cost = 0
+                    count = self.get_construction_count(construction)
+                    if count > 0:
+                        cost += (logtokens - math.log(count))
+                    elif self.cc.is_atom(construction):
+                        cost += badlikelihood
+                    else:
+                        local_morph_costs[construction] = None
+                        continue
+                    assert cost > 0
+                    local_morph_costs[construction] = cost
+                cost = local_morph_costs[construction]
+                if cost is None:
                     continue
+                cost += grid_alpha[pt][0]
                 #_logger.debug("cost(%s)=%.2f", construction, cost)
                 negcosts.append(-cost)
             totcost = -logsumexp(negcosts)
             grid_alpha[t] = (totcost, None)
 
         ## Backward pass
-        for t in itertools.chain(reversed(list(self.cc.split_locations(compound))), [None]):
+        for t in itertools.chain(reversed(list(self.cc.split_locations(compound))), ['start']):
             for pt in itertools.islice(
-                    itertools.chain(self.cc.split_locations(compound, start=t), [None]), maxlen):
+                    itertools.chain(self.cc.split_locations(compound, start=t), ['stop']), maxlen):
                 if grid_beta[pt][0] is None:
                     continue
-                cost = grid_beta[pt][0]
                 construction = self.cc.slice(compound, t, pt)
-                count = self.get_construction_count(construction)
-                if count > 0:
-                    cost += (logtokens - math.log(count))
-                elif self.cc.is_atom(construction):
-                    cost += badlikelihood
-                else:
+                cost = local_morph_costs[construction]
+                if cost is None:
                     continue
+                cost += grid_beta[pt][0]
                 negcosts.append(-cost)
             totcost = -logsumexp(negcosts)
             grid_beta[t] = (totcost, None)
 
         ## Merge pass
         w_expected = collections.Counter()
-        totcost = grid_alpha[None][0]
-        for t in itertools.chain(self.cc.split_locations(compound), [None]):
-            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+        totcost = grid_alpha['stop'][0]
+        # FIXME: final alpha and beta don't match
+        for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
+            for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
                 if grid_alpha[pt][0] is None:
                     continue
                 if grid_beta[pt][0] is None:
                     continue
                 construction = self.cc.slice(compound, pt, t)
-                count = self.get_construction_count(construction)
-                if count > 0:
-                    cost += (logtokens - math.log(count))
-                elif self.cc.is_atom(construction):
-                    cost += badlikelihood
-                else:
+                cost = local_morph_costs[construction]
+                if cost is None:
                     continue
+                # - cost because both alpha and beta already include it?
                 w_expected[construction] += freq * math.exp(
-                    grid_alpha[pt][0] + grid_beta[pt][0] + cost - totcost)
+                    grid_alpha[pt][0] + grid_beta[pt][0] - cost - totcost)
 
         return w_expected, totcost
 

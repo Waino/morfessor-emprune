@@ -22,6 +22,9 @@ class BaseConstructionMethods(object):
         """
         start = start if start is not None else 0
         stop = stop if stop is not None else len(construction)
+        start = start if start != 'start' else 0
+        stop = stop if stop != 'stop' else len(construction)
+        assert all(not isinstance(x, str) for x in (start, stop)), 'start "{}" stop "{}"'.format(start, stop)
 
         for i in range(start+1, stop):
             if self._nosplit and self._nosplit.match(construction[i-1:i+1]):
@@ -56,6 +59,9 @@ class BaseConstructionMethods(object):
 
     @staticmethod
     def slice(construction, start=None, stop=None):
+        start = start if start != 'start' else None
+        stop = stop if stop != 'stop' else None
+        assert all(not isinstance(x, str) for x in (start, stop)), 'start "{}" stop "{}"'.format(start, stop)
         return construction[start:stop]
 
     @staticmethod
