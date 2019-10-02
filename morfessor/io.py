@@ -44,6 +44,37 @@ class MorfessorIO(object):
         self.lowercase = lowercase
         self._version = get_version()
 
+    def read_expected_file(self, file_name, **kwargs):
+        """Read expected file for EM-trained model.
+
+        File format:
+        <count> <construction>
+
+        count can be a float
+        """
+        _logger.info("Reading expected counts from '%s'..." % file_name)
+        for line in self._read_text_file(file_name):
+            count, constr = line.split(' ', 1)
+            yield float(count), constr
+        _logger.info("Done.")
+
+    def write_expected_file(self, file_name, expected, **kwargs):
+        """Write expected counts file
+
+        File format:
+        <count> <construction>
+
+        count can be a float
+        """
+        _logger.info("Saving expected counts to '%s'..." % file_name)
+        with self._open_text_file_write(file_name) as file_obj:
+            d = datetime.datetime.now().replace(microsecond=0)
+            file_obj.write("# Expected counts from Morfessor Baseline EM+prune %s, %s\n" %
+                           (self._version, d))
+            for count, constr in expected:
+                file_obj.write("%f %s\n" % (count, constr))
+        _logger.info("Done.")
+
     def read_segmentation_file(self, file_name, has_counts=True, **kwargs):
         """Read segmentation file.
 

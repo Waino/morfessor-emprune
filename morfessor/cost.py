@@ -109,3 +109,7 @@ class EmCost(Cost):
 
     def all_tokens(self):
         return self.tokens() + self._corpus_coding.boundaries
+
+    def get_expected(self):
+        for substr, count in self.counts.most_common():
+            yield count, substr

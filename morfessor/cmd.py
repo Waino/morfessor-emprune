@@ -391,8 +391,7 @@ def main(args):
     constr_class = BaseConstructionMethods(force_splits=args.forcesplit, nosplit_re=args.nosplit)
     
     if args.em_prune is not None:
-        em_substr = io.read_segmentation_file(args.em_prune)
-        em_substr = [(count, substr) for (count, substr, _) in em_substr]
+        em_substr = io.read_expected_file(args.em_prune)
     else:
         em_substr = None
 
@@ -593,7 +592,10 @@ def main(args):
 
     # FIXME: save em-prune trained model as "segmentation" or "lexicon" or new param?
     if args.savesegfile is not None:
-        io.write_segmentation_file(args.savesegfile, model.get_segmentations())
+        if args.em_prune is not None:
+            io.write_expected_file(args.savesegfile, model.cost.get_expected())
+        else:
+            io.write_segmentation_file(args.savesegfile, model.get_segmentations())
 
     # Output lexicon
     if args.lexfile is not None:
