@@ -836,6 +836,7 @@ class BaselineModel(object):
 
         ## Backward pass
         for t in itertools.chain(reversed(list(self.cc.split_locations(compound))), ['start']):
+            negcosts = []
             for pt in itertools.islice(
                     itertools.chain(self.cc.split_locations(compound, start=t), ['stop']), maxlen):
                 if grid_beta[pt][0] is None:
@@ -852,10 +853,9 @@ class BaselineModel(object):
         ## Merge pass
         w_expected = collections.Counter()
         totcost = grid_alpha['stop'][0]
-        # FIXME: final alpha and beta don't match
         for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
             for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
-                if grid_alpha[pt][0] is None:
+                if grid_alpha[t][0] is None:
                     continue
                 if grid_beta[pt][0] is None:
                     continue
@@ -863,9 +863,9 @@ class BaselineModel(object):
                 cost = local_morph_costs[construction]
                 if cost is None:
                     continue
-                # - cost because both alpha and beta already include it?
+                # + cost because both alpha and beta already include it?
                 w_expected[construction] += freq * math.exp(
-                    grid_alpha[pt][0] + grid_beta[pt][0] - cost - totcost)
+                    -grid_alpha[t][0] -grid_beta[pt][0] + cost + totcost)
 
         return w_expected, totcost
 
