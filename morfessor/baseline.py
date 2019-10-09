@@ -738,6 +738,7 @@ class BaselineModel(object):
         logtokens = math.log(tokens) if tokens > 0 else 0
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
+        extrabad = badlikelihood**2
 
         ## Forward filtering pass
         for t in itertools.chain(self.cc.split_locations(compound), [None]):
@@ -759,6 +760,9 @@ class BaselineModel(object):
                     continue
                 #_logger.debug("cost(%s)=%.2f", construction, cost)
                 negcosts.append(-cost * theta)
+            if len(negcosts) == 0:
+                grid[t] = (extrabad, None)
+                continue
             totcost = -logsumexp(negcosts)
             grid[t] = (totcost, None)
 
