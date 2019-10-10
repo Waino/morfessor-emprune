@@ -818,12 +818,11 @@ class BaselineModel(object):
                     continue
                 construction = self.cc.slice(compound, pt, t)
                 if construction not in local_morph_costs:
-                    cost = 0
                     count = self.get_construction_count(construction)
                     if count > 0:
-                        cost += (logtokens - math.log(count))
+                        cost = (logtokens - math.log(count))
                     elif self.cc.is_atom(construction):
-                        cost += badlikelihood
+                        cost = badlikelihood
                     else:
                         local_morph_costs[construction] = None
                         continue
@@ -857,6 +856,7 @@ class BaselineModel(object):
         ## Merge pass
         w_expected = collections.Counter()
         totcost = grid_alpha['stop'][0]
+        # grid_alpha['stop'][0], grid_beta['start'][0] are approx equal
         for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
             for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
                 if grid_alpha[t][0] is None:
@@ -868,10 +868,15 @@ class BaselineModel(object):
                 if cost is None:
                     continue
                 # + cost because both alpha and beta already include it?
-                w_expected[construction] += freq * math.exp(
+                expect = math.exp(
                     -grid_alpha[t][0] -grid_beta[pt][0] + cost + totcost)
+                if expect > 1:
+                    occurs = compound.count(construction)
+                    assert expect <= occurs, '"{}" has expect {} occurs {}'.format(
+                        construction, expect, occurs)
+                w_expected[construction] += freq * expect
 
-        return w_expected, totcost
+        return w_expected, freq * totcost
 
     #TODO project lambda
     def forward_logprob(self, compound):
