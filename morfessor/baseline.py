@@ -777,6 +777,7 @@ class BaselineModel(object):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
+                # cc.slice requires None for endpoints, not 0
                 pt = None if pt == 0 else pt
                 construction = self.cc.slice(compound, pt, t)
                 count = self.get_construction_count(construction)
@@ -788,7 +789,11 @@ class BaselineModel(object):
                     continue
                 pts.append(pt)
                 probs.append(math.exp(-cost))
-            sample = categorical(pts, probs)
+            if sum(probs) < EPS:
+                # if noting is valid, letterize
+                sample = t - 1
+            else:
+                sample = categorical(pts, probs)
             if sample is not None:
                 splitlocs.append(sample)
             t = sample
