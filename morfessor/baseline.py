@@ -194,8 +194,8 @@ class BaselineModel(object):
 
     def _add_compound(self, compound, c):
         """Add compound with count c to data."""
+        self.cost.update_boundaries(compound, c)
         if self._mode == MODE_NORMAL:
-            self.cost.update_boundaries(compound, c)
             self._modify_construction_count(compound, c)
             oldrc = self._analyses[compound].rcount
             self._analyses[compound] = \
@@ -485,7 +485,7 @@ class BaselineModel(object):
                 continue
             # assume all probability mass goes to viterbi segmentation
             replacement, _ = self.viterbi_segment(
-                construction, taboo=[construction])
+                construction, taboo=[construction], addcount=0)
             if replacement == construction:
                 continue
             count = self.cost.counts[construction]
