@@ -98,12 +98,19 @@ class Cost(object):
 class EmLexiconEncoding(LexiconEncoding):
     pass
 
+class EmCorpusEncoding(CorpusEncoding):
+    def reset(self, counts):
+        self.tokens = sum(counts.values())
+        self.logtokensum = sum(
+            math.log(count) for count in counts.values()
+            if count > 0)
+
 class EmCost(Cost):
     def __init__(self, contr_class, corpusweight=1.0):
         self.cc = contr_class
         # Cost variables
         self._lexicon_coding = EmLexiconEncoding()
-        self._corpus_coding = CorpusEncoding(self._lexicon_coding)
+        self._corpus_coding = EmCorpusEncoding(self._lexicon_coding)
         self._annot_coding = None
 
         self._corpus_weight_updater = None
@@ -118,10 +125,6 @@ class EmCost(Cost):
             # only updating on load
             super().update(substr, count)
 
-    def update(self, *args, **kwargs):
-        # only updating on load
-        pass
-
     def tokens(self):
         toks = sum(self.counts.values())
         return toks
@@ -135,3 +138,6 @@ class EmCost(Cost):
     def get_expected(self):
         for substr, count in self.counts.most_common():
             yield count, substr
+
+    def reset(self):
+        self._corpus_coding.reset(self.counts)

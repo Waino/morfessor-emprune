@@ -29,6 +29,7 @@ MODE_NORMAL = 'normal'
 MODE_EM = 'em'
 MODE_SEGMENT_ONLY = 'segment_only'
 
+EPS = 1e-8
 
 class BaselineModel(object):
     """Morfessor Baseline model class.
@@ -193,11 +194,14 @@ class BaselineModel(object):
 
     def _add_compound(self, compound, c):
         """Add compound with count c to data."""
-        self.cost.update_boundaries(compound, c)
-        self._modify_construction_count(compound, c)
-        oldrc = self._analyses[compound].rcount
-        self._analyses[compound] = \
-            self._analyses[compound]._replace(rcount=oldrc + c)
+        if self._mode == MODE_NORMAL:
+            self.cost.update_boundaries(compound, c)
+            self._modify_construction_count(compound, c)
+            oldrc = self._analyses[compound].rcount
+            self._analyses[compound] = \
+                self._analyses[compound]._replace(rcount=oldrc + c)
+        else:
+            self._analyses[compound] = ConstrNode(c, c, [])
 
     def _remove(self, construction):
         """Remove construction from model."""
@@ -458,10 +462,10 @@ class BaselineModel(object):
 
     def m_step(self, expected, expected_freq_threshold):
         # prune out infrequent
-        # FIXME: tempoarily disabled this pruning
-        #expected = collections.Counter(
-        #    dict((w, c) for (w, c) in expected.items()
-        #         if c > expected_freq_threshold or len(w) == 1))
+        # FIXME: is protecting length 1 useful? max(c, 1e-6))?
+        expected = collections.Counter(
+            dict((w, c) for (w, c) in expected.items()
+                 if c > expected_freq_threshold or len(w) == 1))
 
         # apply digamma for Bayesianified/DPified EM
         # FIXME
@@ -469,9 +473,79 @@ class BaselineModel(object):
         # set model parameters
         self.cost.counts = expected
 
-    def train_em_prune(self, max_epochs=5, sub_epochs=3,
+    def prune_lexicon(self, prune_criterion):
+        self.cost.reset()
+        original_cost = self.get_cost()
+        print('original cost {}'.format(original_cost))
+        constructions = list(w for w, c in self.cost.counts.most_common())
+        n_tot = len(constructions)
+        costs = []
+        for construction in constructions:
+            if len(construction) == 1:
+                continue
+            # assume all probability mass goes to viterbi segmentation
+            replacement, _ = self.viterbi_segment(
+                construction, taboo=[construction])
+            if replacement == construction:
+                continue
+            count = self.cost.counts[construction]
+
+            # apply change
+            self.cost.update(construction, -count)
+            for replcons in replacement:
+                self.cost.update(replcons, count)
+            cost = self.get_cost()
+            # revert change
+            self.cost.update(construction, count)
+            for replcons in replacement:
+                self.cost.update(replcons, -count)
+            print('cost when replaing {} -> {} is {}'.format(
+                construction, replacement, cost))
+            costs.append((cost, construction))
+        costs = sorted(costs)
+        pruned, done = prune_criterion(costs, original_cost, n_tot)
+        n_pruned = len(pruned)
+        for construction in pruned:
+            # prune out selected constructions
+            del self.cost.counts[construction]
+        print('pruned {} done: {}'.format(n_pruned, done))
+        return self.get_cost(), done
+
+    def prune_criterion_lexicon_size(self, proportion, goal_lexicon):
+        # prune at most proportion. prune until goal_lexicon is reached
+        def prune_criterion(costs, original_cost, n_tot):
+            max_prune_prop = int(math.ceil(n_tot * proportion))
+            max_prune_goal = n_tot - goal_lexicon
+            max_prune = min(max_prune_prop, max_prune_goal)
+            print(max_prune_goal, max_prune_prop)
+            done = max_prune_goal <= max_prune_prop
+            pruned = [cons for (cost, cons) in costs[:max_prune]]
+            return pruned, done
+        return prune_criterion
+
+    def prune_criterion_mdl(self, proportion):
+        # prune at most proportion. only prune if it lowers cost.
+        def prune_criterion(costs, original_cost, n_tot):
+            max_prune_prop = int(math.ceil(n_tot * proportion))
+            pruned = []
+            for (i, (cost, cons)) in enumerate(costs):
+                if i >= max_prune_prop:
+                    return pruned, False
+                if cost > original_cost:
+                    return pruned, True
+                pruned.append(cons)
+            # pruned everything
+            print('pruned everything!')
+            return pruned, True
+        return prune_criterion
+
+    def train_em_prune(self, #prune_criterion,
+                       max_epochs=5, sub_epochs=3,
                        expected_freq_threshold=0.5,
                        maxlen=30):
+        # FIXME tmp
+        #prune_criterion = self.prune_criterion_lexicon_size(0.2, 15)
+        prune_criterion = self.prune_criterion_mdl(0.2)
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
@@ -481,8 +555,12 @@ class BaselineModel(object):
                 self.m_step(
                     expected,
                     expected_freq_threshold=expected_freq_threshold)
-            # prune lexicon
-            # FIXME
+            # cost-based pruning of lexicon
+            cost, done = self.prune_lexicon(prune_criterion)
+            _logger.info("Cost after pruning: %s tokens: %s" % (cost, self.cost.all_tokens()))
+            if done:
+                _logger.info('Reached pruning goal')
+                break
         return epoch, cost
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
@@ -643,13 +721,15 @@ class BaselineModel(object):
         return epochs, newcost
 
     def viterbi_segment(self, compound, addcount=1.0, maxlen=30,
-                        allow_longer_unk_splits=False):
+                        allow_longer_unk_splits=False,
+                        taboo=None):
         """Find optimal segmentation using the Viterbi algorithm.
 
         Arguments:
           compound: compound to be segmented
           addcount: constant for additive smoothing (0 = no smoothing)
           maxlen: maximum length for the constructions
+          taboo: not allowed to use these constructions
 
         If additive smoothing is applied, new complex construction types can
         be selected during the search. Without smoothing, only new
@@ -665,6 +745,7 @@ class BaselineModel(object):
         grid = {None: (0.0, None)}
         tokens = self.cost.all_tokens() + addcount
         logtokens = math.log(tokens) if tokens > 0 else 0
+        taboo = set() if taboo is None else set(taboo)
 
         newboundcost = self.cost.newbound_cost(addcount) if addcount > 0 else 0
 
@@ -681,16 +762,18 @@ class BaselineModel(object):
                     continue
                 cost = grid[pt][0]
                 construction = self.cc.slice(compound, pt, t)
+                if construction in taboo:
+                    continue
                 count = self.get_construction_count(construction)
                 if count > 0:
                     cost += (logtokens - math.log(count + addcount))
                 elif addcount > 0:
                     if self.cost.tokens() == 0:
                         cost += (addcount * math.log(addcount) +
-                                 newboundcost + self.cost.get_coding_cost(construction))
+                                newboundcost + self.cost.get_coding_cost(construction))
                     else:
                         cost += (logtokens - math.log(addcount) +
-                                 newboundcost + self.cost.get_coding_cost(construction))
+                                newboundcost + self.cost.get_coding_cost(construction))
 
                 elif self.cc.is_atom(construction):
                     cost += badlikelihood
@@ -811,8 +894,6 @@ class BaselineModel(object):
         local_morph_costs = {}
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
-
-        EPS = 1e-8
 
         ## Forward pass
         for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
