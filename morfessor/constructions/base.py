@@ -61,7 +61,7 @@ class BaseConstructionMethods(object):
     def slice(construction, start=None, stop=None):
         start = start if start != 'start' else None
         stop = stop if stop != 'stop' else None
-        assert all(not isinstance(x, str) for x in (start, stop)), 'start "{}" stop "{}"'.format(start, stop)
+        #assert all(not isinstance(x, str) for x in (start, stop)), 'start "{}" stop "{}"'.format(start, stop)
         return construction[start:stop]
 
     @staticmethod

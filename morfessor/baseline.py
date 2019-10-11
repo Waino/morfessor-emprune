@@ -8,6 +8,21 @@ import numbers
 import random
 import sys
 
+from scipy.special import digamma
+# import math
+# def dunno(x):
+#   result = 0.0
+#   while x < 7:
+#     result -= 1 / x
+#     x += 1
+#   x -= 1.0 / 2.0
+#   xx = 1.0 / x
+#   xx2 = xx * xx
+#   xx4 = xx2 * xx2
+#   result += (math.log(x) + (1.0 / 24.0) * xx2 - (7.0 / 960.0) * xx4 +
+#              (31.0 / 8064.0) * xx4 * xx2 - (127.0 / 30720.0) * xx4 * xx4)
+#   return result
+
 from .cost import Cost, EmCost
 from .constructions.base import BaseConstructionMethods
 from .corpus import LexiconEncoding, CorpusEncoding, \
@@ -467,8 +482,15 @@ class BaselineModel(object):
             dict((w, c) for (w, c) in expected.items()
                  if c > expected_freq_threshold or len(w) == 1))
 
-        # apply digamma for Bayesianified/DPified EM
-        # FIXME
+        # apply exp digamma for Bayesianified/DPified EM
+        # acts as a sparse prior
+        # https://cs.stanford.edu/~pliang/papers/tutorial-acl2007-talk.pdf
+        print('before', expected.most_common(5))
+        tot = sum(expected.values())
+        divisor = math.exp(digamma(tot))
+        for construction in expected.keys():
+            expected[construction] = tot * math.exp(digamma(expected[construction])) / divisor
+        print('after', expected.most_common(5))
 
         # set model parameters
         self.cost.counts = expected
@@ -544,8 +566,8 @@ class BaselineModel(object):
                        expected_freq_threshold=0.5,
                        maxlen=30):
         # FIXME tmp
-        #prune_criterion = self.prune_criterion_lexicon_size(0.2, 15)
-        prune_criterion = self.prune_criterion_mdl(0.2)
+        prune_criterion = self.prune_criterion_lexicon_size(0.2, 15)
+        #prune_criterion = self.prune_criterion_mdl(0.2)
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
@@ -816,20 +838,23 @@ class BaselineModel(object):
         Returns the sampled segmentation and its log-probability.
 
         """
-        grid = {0: (0.0, None), None: (0.0, None)}
+        grid = {'start': (0.0, None)}
         tokens = self.cost.all_tokens()
         logtokens = math.log(tokens) if tokens > 0 else 0
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
         extrabad = badlikelihood**2
 
+        if len(compound) == 1:
+            return [compound], 0
+
         ## Forward filtering pass
-        for t in itertools.chain(self.cc.split_locations(compound), [None]):
+        for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
             # logsum of all paths to current node.
             # Note that we can come from any node in history.
             negcosts = []
 
-            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
+            for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
@@ -851,17 +876,18 @@ class BaselineModel(object):
 
         ## Backward sampling pass
         splitlocs = []
-        t = max(key for key in grid.keys() if key is not None) + 1
-        totcost = grid[None][0]
+        t = 'stop'
+        totcost = grid['stop'][0]
         while t is not None:
             pts = []
             probs = []
-            for pt in tail(maxlen, itertools.chain([0], self.cc.split_locations(compound, stop=t))):
+            t = None if t == 'stop' else t
+            for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
-                # cc.slice requires None for endpoints, not 0
-                pt = None if pt == 0 else pt
+                # cc.slice requires None for endpoints
+                pt = None if pt == 'start' else pt
                 construction = self.cc.slice(compound, pt, t)
                 count = self.get_construction_count(construction)
                 if count > 0:
@@ -871,10 +897,19 @@ class BaselineModel(object):
                 else:
                     continue
                 pts.append(pt)
-                probs.append(math.exp(-cost))
+                if cost < 0:
+                    # FIXME: bug or imprecision?
+                    probs.append(1)
+                else:
+                    probs.append(math.exp(-cost))
             if sum(probs) < EPS:
                 # if noting is valid, letterize
-                sample = t - 1
+                if t is None:
+                    sample = None
+                else:
+                    sample = t - 1
+                    if sample <= 0:
+                        sample = None
             else:
                 sample = categorical(pts, probs)
             if sample is not None:

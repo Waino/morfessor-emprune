@@ -42,7 +42,10 @@ class Cost(object):
         self._corpus_coding.weight = weight
 
     def cost(self):
-        return self._lexicon_coding.get_cost() + self._corpus_coding.get_cost()
+        lc = self._lexicon_coding.get_cost()
+        cc = self._corpus_coding.get_cost()
+        print('lc {} cc {}'.format(lc, cc))
+        return lc + cc
 
     def update(self, construction, delta):
         if delta == 0:
