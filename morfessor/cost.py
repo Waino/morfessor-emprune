@@ -115,7 +115,12 @@ class EmCost(Cost):
 
     def load_lexicon(self, substr_lexicon):
         for count, substr in substr_lexicon:
-            self.update(substr, count)
+            # only updating on load
+            super().update(substr, count)
+
+    def update(self, *args, **kwargs):
+        # only updating on load
+        pass
 
     def tokens(self):
         toks = sum(self.counts.values())

@@ -738,6 +738,7 @@ class BaselineModel(object):
         logtokens = math.log(tokens) if tokens > 0 else 0
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
+        extrabad = badlikelihood**2
 
         ## Forward filtering pass
         for t in itertools.chain(self.cc.split_locations(compound), [None]):
@@ -759,6 +760,9 @@ class BaselineModel(object):
                     continue
                 #_logger.debug("cost(%s)=%.2f", construction, cost)
                 negcosts.append(-cost * theta)
+            if len(negcosts) == 0:
+                grid[t] = (extrabad, None)
+                continue
             totcost = -logsumexp(negcosts)
             grid[t] = (totcost, None)
 
@@ -773,6 +777,7 @@ class BaselineModel(object):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
+                # cc.slice requires None for endpoints, not 0
                 pt = None if pt == 0 else pt
                 construction = self.cc.slice(compound, pt, t)
                 count = self.get_construction_count(construction)
@@ -784,7 +789,11 @@ class BaselineModel(object):
                     continue
                 pts.append(pt)
                 probs.append(math.exp(-cost))
-            sample = categorical(pts, probs)
+            if sum(probs) < EPS:
+                # if noting is valid, letterize
+                sample = t - 1
+            else:
+                sample = categorical(pts, probs)
             if sample is not None:
                 splitlocs.append(sample)
             t = sample
@@ -796,12 +805,14 @@ class BaselineModel(object):
     def forward_backward(self, compound, freq, maxlen=30):
         grid_alpha = {'start': (0.0, None)}
         grid_beta = {'stop': (0.0, None)}
-        tokens = self.cost.all_tokens()
+        tokens = self.cost.tokens()
         logtokens = math.log(tokens) if tokens > 0 else 0
 
         local_morph_costs = {}
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
+
+        EPS = 1e-8
 
         ## Forward pass
         for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
@@ -814,16 +825,15 @@ class BaselineModel(object):
                     continue
                 construction = self.cc.slice(compound, pt, t)
                 if construction not in local_morph_costs:
-                    cost = 0
                     count = self.get_construction_count(construction)
                     if count > 0:
-                        cost += (logtokens - math.log(count))
+                        cost = (logtokens - math.log(count))
                     elif self.cc.is_atom(construction):
-                        cost += badlikelihood
+                        cost = badlikelihood
                     else:
                         local_morph_costs[construction] = None
                         continue
-                    assert cost > 0
+                    assert cost >= 0
                     local_morph_costs[construction] = cost
                 cost = local_morph_costs[construction]
                 if cost is None:
@@ -853,21 +863,29 @@ class BaselineModel(object):
         ## Merge pass
         w_expected = collections.Counter()
         totcost = grid_alpha['stop'][0]
+        # grid_alpha['stop'][0], grid_beta['start'][0] are approx equal
         for t in itertools.chain(self.cc.split_locations(compound), ['stop']):
             for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
-                if grid_alpha[t][0] is None:
+                # grid_alpha[pt][0] is the total probability of all paths ending at pt
+                # grid_beta[t][0] is the total probability of all paths starting at t
+                # the compound pt:t probability is the same as cached previously
+                if grid_alpha[pt][0] is None:
                     continue
-                if grid_beta[pt][0] is None:
+                if grid_beta[t][0] is None:
                     continue
                 construction = self.cc.slice(compound, pt, t)
                 cost = local_morph_costs[construction]
                 if cost is None:
                     continue
-                # + cost because both alpha and beta already include it?
-                w_expected[construction] += freq * math.exp(
-                    -grid_alpha[t][0] -grid_beta[pt][0] + cost + totcost)
+                expect = math.exp(
+                    -grid_alpha[pt][0] -grid_beta[t][0] -cost + totcost)
+                if expect > 1:
+                    occurs = compound.count(construction)
+                    assert expect <= occurs + EPS, '"{}" has expect {} occurs {}'.format(
+                        construction, expect, occurs)
+                w_expected[construction] += freq * expect
 
-        return w_expected, totcost
+        return w_expected, freq * totcost
 
     #TODO project lambda
     def forward_logprob(self, compound):
