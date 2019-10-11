@@ -5,7 +5,7 @@ from collections import Counter
 
 import math
 
-from .corpus import CorpusEncoding, LexiconEncoding, AnnotatedCorpusEncoding,FixedCorpusWeight
+from .corpus import CorpusEncoding, LexiconEncoding, AnnotatedCorpusEncoding, FixedCorpusWeight
 
 _logger = logging.getLogger(__name__)
 
@@ -95,7 +95,24 @@ class Cost(object):
         return self._lexicon_coding.get_codelength(compound) / self._corpus_coding.weight
 
 
+class EmLexiconEncoding(LexiconEncoding):
+    pass
+
 class EmCost(Cost):
+    def __init__(self, contr_class, corpusweight=1.0):
+        self.cc = contr_class
+        # Cost variables
+        self._lexicon_coding = EmLexiconEncoding()
+        self._corpus_coding = CorpusEncoding(self._lexicon_coding)
+        self._annot_coding = None
+
+        self._corpus_weight_updater = None
+
+        #Set corpus weight updater
+        self.set_corpus_weight_updater(corpusweight)
+
+        self.counts = Counter()
+
     def load_lexicon(self, substr_lexicon):
         for count, substr in substr_lexicon:
             self.update(substr, count)
