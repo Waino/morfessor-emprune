@@ -487,9 +487,9 @@ class BaselineModel(object):
         # https://cs.stanford.edu/~pliang/papers/tutorial-acl2007-talk.pdf
         print('before', expected.most_common(5))
         tot = sum(expected.values())
-        divisor = math.exp(digamma(tot))
+        multiplier = tot / math.exp(digamma(tot))
         for construction in expected.keys():
-            expected[construction] = tot * math.exp(digamma(expected[construction])) / divisor
+            expected[construction] = math.exp(digamma(expected[construction])) * multiplier
         print('after', expected.most_common(5))
 
         # set model parameters

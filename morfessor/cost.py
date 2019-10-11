@@ -108,6 +108,10 @@ class EmCorpusEncoding(CorpusEncoding):
             math.log(count) for count in counts.values()
             if count > 0)
 
+    def frequency_distribution_cost(self):
+        # FIXME: Dirichlet prior?
+        return 0
+
 class EmCost(Cost):
     def __init__(self, contr_class, corpusweight=1.0):
         self.cc = contr_class
