@@ -35,7 +35,7 @@ class FrequentSubstrings(object):
             self.prefixes = collections.Counter(
                 dict(self.prefixes.most_common(self.lex_size)))
         else:
-            print('Nothing pruned in first pass. Use longer prefixes.')
+            print('Nothing pruned in first pass. Use longer prefixes.', file=sys.stderr)
 
     def second_pass(self, seqs):
         # extend frequent prefixes
@@ -53,7 +53,7 @@ class FrequentSubstrings(object):
             combined = collections.Counter(
                 dict(combined.most_common(prune_to)))
         else:
-            print('Nothing pruned in finalize. Your total lexicon is small.')
+            print('Nothing pruned in finalize. Your total lexicon is small.', file=sys.stderr)
         for char, count in self.chars.items():
             if char not in combined:
                 combined[char] = count

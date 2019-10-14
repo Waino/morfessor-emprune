@@ -629,9 +629,9 @@ def main(args):
     if args.savefile is not None:
         io.write_binary_model_file(args.savefile, model)
 
-    # FIXME: save em-prune trained model as "segmentation" or "lexicon" or new param?
     if args.savesegfile is not None:
         if args.em_prune is not None:
+            # save em-prune trained model expected counts as "segmentation"
             io.write_expected_file(args.savesegfile, model.cost.get_expected())
         else:
             io.write_segmentation_file(args.savesegfile, model.get_segmentations())
@@ -651,7 +651,8 @@ def main(args):
 
     # Segment test data
     if len(args.testfiles) > 0:
-        _logger.info("Segmenting test data...")
+        methodstr = 'sampling' if args.sample else 'viterbi'
+        _logger.info("Segmenting test data using %s...", methodstr)
         outformat = args.outputformat
         csep = args.outputformatseparator
         outformat = outformat.replace(r"\n", "\n")
