@@ -10,7 +10,7 @@ import sys
 
 from scipy.special import digamma
 # import math
-# def dunno(x):
+# def digamma(x):
 #   result = 0.0
 #   while x < 7:
 #     result -= 1 / x
@@ -485,12 +485,10 @@ class BaselineModel(object):
         # apply exp digamma for Bayesianified/DPified EM
         # acts as a sparse prior
         # https://cs.stanford.edu/~pliang/papers/tutorial-acl2007-talk.pdf
-        print('before', expected.most_common(5))
         tot = sum(expected.values())
         multiplier = tot / math.exp(digamma(tot))
         for construction in expected.keys():
             expected[construction] = math.exp(digamma(expected[construction])) * multiplier
-        print('after', expected.most_common(5))
 
         # set model parameters
         self.cost.counts = expected
@@ -498,7 +496,7 @@ class BaselineModel(object):
     def prune_lexicon(self, prune_criterion):
         self.cost.reset()
         original_cost = self.get_cost()
-        print('original cost {}'.format(original_cost))
+        #print('original cost {}'.format(original_cost))
         constructions = list(w for w, c in self.cost.counts.most_common())
         n_tot = len(constructions)
         costs = []
@@ -521,25 +519,26 @@ class BaselineModel(object):
             self.cost.update(construction, count)
             for replcons in replacement:
                 self.cost.update(replcons, -count)
-            print('cost when replaing {} -> {} is {}'.format(
-                construction, replacement, cost))
+            #print('cost when replaing {} -> {} is {}'.format(
+            #    construction, replacement, cost))
             costs.append((cost, construction))
         costs = sorted(costs)
         pruned, done = prune_criterion(costs, original_cost, n_tot)
         n_pruned = len(pruned)
         for construction in pruned:
             # prune out selected constructions
+            count = self.cost.counts[construction]
+            self.cost.update(construction, -count)
             del self.cost.counts[construction]
-        print('pruned {} done: {}'.format(n_pruned, done))
+        #print('pruned {} done: {}'.format(n_pruned, done))
         return self.get_cost(), done
 
     def prune_criterion_lexicon_size(self, proportion, goal_lexicon):
         # prune at most proportion. prune until goal_lexicon is reached
         def prune_criterion(costs, original_cost, n_tot):
             max_prune_prop = int(math.ceil(n_tot * proportion))
-            max_prune_goal = n_tot - goal_lexicon
+            max_prune_goal = max(0, int(n_tot - goal_lexicon))
             max_prune = min(max_prune_prop, max_prune_goal)
-            print(max_prune_goal, max_prune_prop)
             done = max_prune_goal <= max_prune_prop
             pruned = [cons for (cost, cons) in costs[:max_prune]]
             return pruned, done
@@ -557,17 +556,15 @@ class BaselineModel(object):
                     return pruned, True
                 pruned.append(cons)
             # pruned everything
-            print('pruned everything!')
+            _logger.info('pruned everything!')
             return pruned, True
         return prune_criterion
 
-    def train_em_prune(self, #prune_criterion,
+    def train_em_prune(self, prune_criterion,
                        max_epochs=5, sub_epochs=3,
                        expected_freq_threshold=0.5,
                        maxlen=30):
-        # FIXME tmp
-        prune_criterion = self.prune_criterion_lexicon_size(0.2, 15)
-        #prune_criterion = self.prune_criterion_mdl(0.2)
+        done = False
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
@@ -577,12 +574,13 @@ class BaselineModel(object):
                 self.m_step(
                     expected,
                     expected_freq_threshold=expected_freq_threshold)
+            if done:
+                break
             # cost-based pruning of lexicon
             cost, done = self.prune_lexicon(prune_criterion)
             _logger.info("Cost after pruning: %s tokens: %s" % (cost, self.cost.all_tokens()))
             if done:
                 _logger.info('Reached pruning goal')
-                break
         return epoch, cost
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),

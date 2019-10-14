@@ -187,10 +187,6 @@ Interactive use (read corpus from user):
             ("algorithm type (%(choices)s); "
              "repeat for sequential training with "
              "multiple algorithms (default 'recursive')"))
-    add_arg('--em-prune', type=str, default=None, metavar='<substr_file>',
-            help='Use Expectation-Maximization + pruning. '
-            'Load initial substring lexicon from specified file. '
-            'Algorithms specified with -a are ignored.')
     add_arg('-d', '--dampening', dest="dampening", type=_str, default='ones',
             metavar='<type>', choices=['none', 'log', 'ones'],
             help="frequency dampening for training data ('none', 'log', or "
@@ -236,7 +232,31 @@ Interactive use (read corpus from user):
     add_arg('--viterbi-maxlen', dest="viterbimaxlen", default=30,
             type=int, metavar='<int>',
             help="maximum construction length in Viterbi training "
-                 "and segmentation (default %(default)s)")
+                 "and segmentation, and EM training (default %(default)s)")
+
+    # Options for em+prune model training
+    add_arg = parser.add_argument_group(
+        'em+prune training options').add_argument
+    add_arg('--em-prune', type=str, default=None, metavar='<substr_file>',
+            help='Use Expectation-Maximization + pruning. '
+            'Load initial substring lexicon from specified file. '
+            'Algorithms specified with -a are ignored.')
+    add_arg('--prune-criterion', type=str, default='lexicon',
+            choices=['lexicon', 'mdl'],
+            help='Criterion for pruning subwords. '
+            '"lexicon" must be combined with --num-morph-types.')
+    add_arg('--prune-proportion', type=float, default=0.2, metavar='<float>',
+            help='Prune at most this proportion of subwords per epoch. '
+            '(default "%(default)s")')
+    add_arg('--em-subepochs', type=int, default=3, metavar='<int>',
+            help='Subepochs of EM to perform before pruning. '
+            '(default "%(default)s"). '
+            'Also see --max-epochs')
+    add_arg('--expected-freq-threshold', dest='expected_freq_threshold',
+            type=float, default=0.5, metavar='<float>',
+            help='Also prune subwords with expected count less than this. '
+            '(default "%(default)s"). ')
+    # also use these: --num-morph-types, --max-epochs, --viterbi-maxlen
 
     # Options for corpusweight tuning
     add_arg = parser.add_mutually_exclusive_group().add_argument
@@ -250,7 +270,7 @@ Interactive use (read corpus from user):
     add_arg('--num-morph-types', dest='morphtypes', default=None, type=float,
             metavar='<float>',
             help="tune the corpusweight to obtain the desired number of morph "
-                 "types")
+                 "types. Also used for EM+prune with lexicon criterion.")
 
     add_arg = parser.add_argument_group(
         'Non-exlusive corpusweight tuning options').add_argument
@@ -439,7 +459,8 @@ def main(args):
         updater = MorphLengthCorpusWeight(args.morphlength, args.threshold)
         model.set_corpus_weight_updater(updater)
 
-    if args.morphtypes is not None:
+    if args.morphtypes is not None and args.em_prune is None:
+        # em_prune uses args.morphtypes in a different way
         updater = NumMorphCorpusWeight(args.morphtypes, args.threshold)
         model.set_corpus_weight_updater(updater)
 
@@ -521,9 +542,27 @@ def main(args):
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.em_prune is not None:
-            _logger.info("Batch training with em+prune algorithm")
+            _logger.info("Batch training with em+prune algorithm, criterion: %s",
+                args.prune_criterion)
             c = model.load_data(data)
-            e, c = model.train_em_prune()   # FIXME: params
+            if args.prune_criterion == 'lexicon':
+                if args.morphtypes is None:
+                    raise Exception('Must specify --num-morph-types')
+                prune_criterion = model.prune_criterion_lexicon_size(
+                    proportion=args.prune_proportion,
+                    goal_lexicon=args.morphtypes)
+            elif args.prune_criterion == 'mdl':
+                prune_criterion = model.prune_criterion_mdl(
+                    proportion=args.prune_proportion)
+            if args.maxepochs is None:
+                # em-prune needs maxepochs to be set
+                args.maxepochs = 15
+            e, c = model.train_em_prune(
+                prune_criterion,
+                max_epochs=args.maxepochs,
+                sub_epochs=args.em_subepochs,
+                expected_freq_threshold=args.expected_freq_threshold,
+                maxlen=args.viterbimaxlen)
         elif args.trainmode == 'init':
             c = model.load_data(data)
         elif args.trainmode == 'init+batch':

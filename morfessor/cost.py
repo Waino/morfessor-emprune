@@ -44,7 +44,6 @@ class Cost(object):
     def cost(self):
         lc = self._lexicon_coding.get_cost()
         cc = self._corpus_coding.get_cost()
-        print('lc {} cc {}'.format(lc, cc))
         return lc + cc
 
     def update(self, construction, delta):
@@ -109,7 +108,7 @@ class EmCorpusEncoding(CorpusEncoding):
             if count > 0)
 
     def frequency_distribution_cost(self):
-        # FIXME: Dirichlet prior?
+        # FIXME: Multinomial?
         return 0
 
 class EmCost(Cost):
