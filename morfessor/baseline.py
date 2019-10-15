@@ -1133,6 +1133,8 @@ class BaselineModel(object):
                                 self.cost.compound_tokens()) -
                         math.log(self.cost.compound_tokens()))
             results.append((cost, constructions))
+        if len(results) == 0:
+            results = [(badlikelihood, [compound])]
         return [(constr, cost) for cost, constr in sorted(results)]
 
     def get_corpus_coding_weight(self):
