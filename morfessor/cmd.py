@@ -763,7 +763,7 @@ class SampleCache(object):
                 analyses = [analyses[0]]
             else:
                 distr = [x / divisor for x in distr]
-                self.cache[compound] = (analyses, distr)
+            self.cache[compound] = (analyses, distr)
         else:
             self.hits += 1
         analyses, distr = self.cache[compound]
