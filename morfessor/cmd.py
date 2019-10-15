@@ -758,8 +758,12 @@ class SampleCache(object):
             analyses, logps = zip(*nbestlist)
             distr = [math.exp(-x) for x in logps]
             divisor = sum(distr)
-            distr = [x / divisor for x in distr]
-            self.cache[compound] = (analyses, distr)
+            if divisor == 0:
+                distr = [1]
+                analyses = [analyses[0]]
+            else:
+                distr = [x / divisor for x in distr]
+                self.cache[compound] = (analyses, distr)
         else:
             self.hits += 1
         analyses, distr = self.cache[compound]
