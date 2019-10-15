@@ -74,7 +74,7 @@ class Cost(object):
         return self._corpus_coding.boundaries
 
     def types(self):
-        return self._lexicon.coding.boundaries
+        return self._lexicon_coding.boundaries
 
     def all_tokens(self):
         return self._corpus_coding.tokens + self._corpus_coding.boundaries
@@ -98,7 +98,16 @@ class Cost(object):
 
 
 class EmLexiconEncoding(LexiconEncoding):
-    pass
+    def reset(self, counts):
+        self.atoms = Counter()
+        self.tokens = 0
+        self.logtokensum = 0
+        self.boundaries = 0
+        for construction, count in counts.items():
+            if count == 0:
+                continue
+            self.add(construction)
+
 
 class EmCorpusEncoding(CorpusEncoding):
     def reset(self, counts):
@@ -146,4 +155,5 @@ class EmCost(Cost):
             yield count, substr
 
     def reset(self):
+        self._lexicon_coding.reset(self.counts)
         self._corpus_coding.reset(self.counts)

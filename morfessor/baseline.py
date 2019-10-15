@@ -578,7 +578,8 @@ class BaselineModel(object):
                 break
             # cost-based pruning of lexicon
             cost, done = self.prune_lexicon(prune_criterion)
-            _logger.info("Cost after pruning: %s tokens: %s" % (cost, self.cost.all_tokens()))
+            _logger.info("Cost after pruning: %s types: %s tokens: %s" %
+                (cost, self.cost.types(), self.cost.all_tokens()))
             if done:
                 _logger.info('Reached pruning goal')
         return epoch, cost
