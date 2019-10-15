@@ -832,6 +832,7 @@ class BaselineModel(object):
 
         Arguments:
           compound: compound to be segmented
+          theta: sampling temperature. (1.0 = Viterbi).
           maxlen: maximum length for the constructions
 
         Returns the sampled segmentation and its log-probability.
@@ -860,13 +861,13 @@ class BaselineModel(object):
                 construction = self.cc.slice(compound, pt, t)
                 count = self.get_construction_count(construction)
                 if count > 0:
-                    cost += (logtokens - math.log(count))
+                    cost += (logtokens - theta * math.log(count))
                 elif self.cc.is_atom(construction):
                     cost += badlikelihood
                 else:
                     continue
                 #_logger.debug("cost(%s)=%.2f", construction, cost)
-                negcosts.append(-cost * theta)
+                negcosts.append(-cost)
             if len(negcosts) == 0:
                 grid[t] = (extrabad, None)
                 continue
@@ -1046,13 +1047,15 @@ class BaselineModel(object):
                  math.log(self._corpus_coding.boundaries))
         return cost
 
-    def viterbi_nbest(self, compound, n, addcount=1.0, maxlen=30):
+    def viterbi_nbest(self, compound, n, addcount=1.0, theta=1.0, maxlen=30,
+                      allow_longer_unk_splits=False):
         """Find top-n optimal segmentations using the Viterbi algorithm.
 
         Arguments:
           compound: compound to be segmented
           n: how many segmentations to return
           addcount: constant for additive smoothing (0 = no smoothing)
+          theta: sampling temperature. (1.0 = Viterbi).
           maxlen: maximum length for the constructions
 
         If additive smoothing is applied, new complex construction types can
@@ -1084,7 +1087,7 @@ class BaselineModel(object):
                     construction = self.cc.slice(compound, pt, t)
                     count = self.get_construction_count(construction)
                     if count > 0:
-                        cost += (logtokens - math.log(count + addcount))
+                        cost += (logtokens - theta * math.log(count + addcount))
                     elif addcount > 0:
                         if self.cost.tokens() == 0:
                             cost += (addcount * math.log(addcount) +

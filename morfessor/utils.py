@@ -31,7 +31,10 @@ def categorical(values, p):
     # FIXME: refactor without numpy
     norm = sum(p)
     p = [x / norm for x in p]
-    return np.random.choice(values, p=p)
+    # np.random.choice doesn't accept multidimensional data
+    indices = list(range(len(values)))
+    idx = np.random.choice(indices, p=p)
+    return values[idx]
 
 
 # Progress bar for generators (length unknown):

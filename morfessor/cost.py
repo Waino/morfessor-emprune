@@ -134,15 +134,25 @@ class EmCost(Cost):
         self.set_corpus_weight_updater(corpusweight)
 
         self.counts = Counter()
+        self._cached_tokens = None
 
     def load_lexicon(self, substr_lexicon):
         for count, substr in substr_lexicon:
             # only updating on load
             super().update(substr, count)
 
+    def update(self, *args, **kwargs):
+        self._cached_tokens = None
+        super().update(*args, **kwargs)
+
+    def update_boundaries(self, *args, **kwargs):
+        self._cached_tokens = None
+        super().update_boundaries(*args, **kwargs)
+
     def tokens(self):
-        toks = sum(self.counts.values())
-        return toks
+        if self._cached_tokens is None:
+            self._cached_tokens = sum(self.counts.values())
+        return self._cached_tokens
 
     def compound_tokens(self):
         return self._corpus_coding.boundaries
@@ -155,5 +165,6 @@ class EmCost(Cost):
             yield count, substr
 
     def reset(self):
+        self._cached_tokens = None
         self._lexicon_coding.reset(self.counts)
         self._corpus_coding.reset(self.counts)

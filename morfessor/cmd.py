@@ -122,13 +122,15 @@ Interactive use (read corpus from user):
             help="output final lexicon to given file")
     add_arg('--save-parameters', dest='saveparamsfile', default=None,
             metavar='<file>',
-            help='Save hyperparameters to file. ')
+            help='Save hyperparameters to file.')
     add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
             help="output n-best viterbi results")
     add_arg('--sample', dest="sample", default=False, action='store_true',
-            help='Use sampling instead of viterbi segmentation. ')
+            help='Use sampling instead of viterbi segmentation.')
+    add_arg('--sample-nbest', dest="sample_nbest", default=None, type=int, metavar='<int>',
+            help='Use sampling from the n-best viterbi segmentation.')
     add_arg('--sampling-temperature', dest="sampling_theta", default=0.5, type=float, metavar='<float>',
-            help='Temperature parameter for sampling')
+            help='(Inverted) temperature parameter for sampling.')
 
     # Options for data formats
     add_arg = parser.add_argument_group(
@@ -651,7 +653,17 @@ def main(args):
 
     # Segment test data
     if len(args.testfiles) > 0:
-        methodstr = 'sampling' if args.sample else 'viterbi'
+        if args.sample:
+            methodstr = 'sampling'
+        elif args.sample_nbest:
+            methodstr = 'sampling from n-best'
+            samplecache = SampleCache(
+                model, args.sample_nbest,
+                addcount=args.viterbismooth,
+                theta=args.sampling_theta,
+                maxlen=args.viterbimaxlen)
+        else:
+            methodstr =  'viterbi'
         _logger.info("Segmenting test data using %s...", methodstr)
         outformat = args.outputformat
         csep = args.outputformatseparator
@@ -683,10 +695,17 @@ def main(args):
                                                 compound=compound,
                                                 count=count, logprob=logp,
                                                 clogprob=clogprob))
+                elif args.sample_nbest:
+                    constructions = samplecache.segment(atoms)
+                    analysis = io.format_constructions(constructions, csep=csep)
+                    fobj.write(outformat.format(analysis=analysis,
+                                                compound=compound,
+                                                count=count, logprob=None,
+                                                clogprob=clogprob))
                 elif args.nbest > 1:
                     nbestlist = model.viterbi_nbest(atoms, args.nbest,
-                                                    args.viterbismooth,
-                                                    args.viterbimaxlen)
+                                                    addcount=args.viterbismooth,
+                                                    maxlen=args.viterbimaxlen)
                     for constructions, logp in nbestlist:
                         analysis = io.format_constructions(constructions,
                                                            csep=csep)
@@ -714,6 +733,40 @@ def main(args):
         result = e.evaluate_model(model, meta_data={'name': 'MODEL'})
         print(result.format(FORMAT_STRINGS['default']))
         _logger.info("Done")
+
+class SampleCache(object):
+    def __init__(self, model, sample_nbest,
+                addcount=1.0, theta=0.5, maxlen=30):
+            self.model = model
+            self.sample_nbest = sample_nbest
+            self.addcount = addcount
+            self.theta = theta
+            self.maxlen = maxlen
+            self.cache = {}
+            self.hits = 0
+            self.misses = 0
+
+    def segment(self, compound):
+        if compound not in self.cache:
+            self.misses += 1
+            nbestlist = self.model.viterbi_nbest(
+                compound,
+                self.sample_nbest,
+                addcount=self.addcount,
+                theta=self.theta,
+                maxlen=self.maxlen)
+            analyses, logps = zip(*nbestlist)
+            distr = [math.exp(-x) for x in logps]
+            divisor = sum(distr)
+            distr = [x / divisor for x in distr]
+            self.cache[compound] = (analyses, distr)
+        else:
+            self.hits += 1
+        analyses, distr = self.cache[compound]
+        if len(analyses) == 1:
+            return analyses[0]
+        sample = utils.categorical(analyses, distr)
+        return sample
 
 
 def get_evaluation_argparser():
