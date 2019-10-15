@@ -1046,7 +1046,6 @@ class BaselineModel(object):
                  math.log(self._corpus_coding.boundaries))
         return cost
 
-    # TODO project lambda
     def viterbi_nbest(self, compound, n, addcount=1.0, maxlen=30):
         """Find top-n optimal segmentations using the Viterbi algorithm.
 
@@ -1064,87 +1063,73 @@ class BaselineModel(object):
         log-probabilities.
 
         """
-        clen = len(compound)
-        grid = [[(0.0, None, None)]]
-        if self._corpus_coding.tokens + self._corpus_coding.boundaries + \
-                addcount > 0:
-            logtokens = math.log(self._corpus_coding.tokens +
-                                 self._corpus_coding.boundaries + addcount)
-        else:
-            logtokens = 0
-        if addcount > 0:
-            newboundcost = (self._lexicon_coding.boundaries + addcount) * \
-                           math.log(self._lexicon_coding.boundaries + addcount)
-            if self._lexicon_coding.boundaries > 0:
-                newboundcost -= self._lexicon_coding.boundaries * \
-                                math.log(self._lexicon_coding.boundaries)
-            newboundcost /= self._corpus_coding.weight
-        else:
-            newboundcost = 0
-        badlikelihood = 1.0 + clen * logtokens + newboundcost + \
-                        self._lexicon_coding.get_codelength(compound) / \
-                        self._corpus_coding.weight
+        grid = {None: [(0.0, None)]}
+        tokens = self.cost.all_tokens() + addcount
+        logtokens = math.log(tokens) if tokens > 0 else 0
+
+        newboundcost = self.cost.newbound_cost(addcount) if addcount > 0 else 0
+
+        badlikelihood = self.cost.bad_likelihood(compound,addcount)
+
         # Viterbi main loop
-        for t in range(1, clen + 1):
+        for t in itertools.chain(self.cc.split_locations(compound), [None]):
             # Select the best path to current node.
             # Note that we can come from any node in history.
             bestn = []
-            if self.nosplit_re and t < clen and \
-                    self.nosplit_re.match(compound[(t-1):(t+1)]):
-                grid.append([(-clen*badlikelihood, t-1, -1)])
-                continue
-            for pt in range(max(0, t - maxlen), t):
+            for pt in tail(maxlen, itertools.chain([None], self.cc.split_locations(compound, stop=t))):
                 for k in range(len(grid[pt])):
                     if grid[pt][k][0] is None:
                         continue
-                    cost = grid[pt][k][0]
-                    construction = compound[pt:t]
+                    cost = -grid[pt][k][0]
+                    construction = self.cc.slice(compound, pt, t)
                     count = self.get_construction_count(construction)
                     if count > 0:
                         cost += (logtokens - math.log(count + addcount))
                     elif addcount > 0:
-                        if self._corpus_coding.tokens == 0:
-                            cost -= (addcount * math.log(addcount) +
-                                     newboundcost +
-                                     self._lexicon_coding.get_codelength(
-                                         construction)
-                                     / self._corpus_coding.weight)
+                        if self.cost.tokens() == 0:
+                            cost += (addcount * math.log(addcount) +
+                                    newboundcost + self.cost.get_coding_cost(construction))
                         else:
-                            cost -= (logtokens - math.log(addcount) +
-                                     newboundcost +
-                                     self._lexicon_coding.get_codelength(
-                                         construction)
-                                     / self._corpus_coding.weight)
-                    elif len(construction) == 1:
-                        cost -= badlikelihood
-                    elif self.nosplit_re:
+                            cost += (logtokens - math.log(addcount) +
+                                    newboundcost + self.cost.get_coding_cost(construction))
+
+                    elif self.cc.is_atom(construction):
+                        cost += badlikelihood
+                    elif allow_longer_unk_splits:
                         # Some splits are forbidden, so longer unknown
                         # constructions have to be allowed
-                        cost -= len(construction) * badlikelihood
+                        cost += len(self.cc.corpus_key(construction)) * badlikelihood
                     else:
                         continue
                     if len(bestn) < n:
-                        heapq.heappush(bestn, (cost, pt, k))
+                        heapq.heappush(bestn, (-cost, pt, k))
                     else:
-                        heapq.heappushpop(bestn, (cost, pt, k))
-            grid.append(bestn)
+                        heapq.heappushpop(bestn, (-cost, pt, k))
+            grid[t] = bestn
         results = []
-        for k in range(len(grid[-1])):
+        for k in range(len(grid[None])):
             constructions = []
-            cost, path, ki = grid[-1][k]
-            lt = clen + 1
-            while path is not None:
-                t = path
-                constructions.append(compound[t:lt])
-                path = grid[t][ki][1]
-                ki = grid[t][ki][2]
-                lt = t
+            cost, path, ki = grid[None][k]
+            cost = -cost
+            lt = None
+            if path is None:
+                constructions = [compound]
+            else:
+                while True:
+                    t = path
+                    constructions.append(self.cc.slice(compound, t, lt))
+                    path = grid[t][ki][1]
+                    ki = grid[t][ki][2]
+                    lt = t
+                    if lt is None:
+                        break
             constructions.reverse()
             # Add boundary cost
-            cost -= (math.log(self._corpus_coding.tokens +
-                              self._corpus_coding.boundaries) -
-                     math.log(self._corpus_coding.boundaries))
-            results.append((-cost, constructions))
+            if self._mode == MODE_NORMAL:
+                cost += (math.log(self.cost.tokens() +
+                                self.cost.compound_tokens()) -
+                        math.log(self.cost.compound_tokens()))
+            results.append((cost, constructions))
         return [(constr, cost) for cost, constr in sorted(results)]
 
     def get_corpus_coding_weight(self):
