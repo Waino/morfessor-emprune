@@ -110,28 +110,63 @@ class EmLexiconEncoding(LexiconEncoding):
 
 
 class EmCorpusEncoding(CorpusEncoding):
+    def __init__(self, *args, freq_distr='zero', **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            freq_dist_funcs = {
+                'zero': self.frequency_distribution_cost_zero,
+                'bl': self.frequency_distribution_cost_bl,
+            }
+            self.frequency_distribution_cost = freq_dist_funcs[freq_distr]
+        except KeyError:
+            raise Exception('Unrecognized freq_distr {}'.format(freq_distr))
+
     def reset(self, counts):
         self.tokens = sum(counts.values())
         self.logtokensum = sum(
             math.log(count) for count in counts.values()
             if count > 0)
 
-    def frequency_distribution_cost(self):
-        # FIXME: Multinomial?
-        return 0
+    # FIXME: Multinomial? Length-binned multinomial?
+    def frequency_distribution_cost_zero(self):
+        return 0.0
+
+    def frequency_distribution_cost_bl(self):
+        """Approximates the Morfessor Baseline frequency distribution cost
+        -log[(u - 1)! (v - u)! / (v - 1)!]
+        by rounding the expected token count to an integer.
+        An alternative would be to use the float and replace the factorial
+        with the Gamma function.
+        Neither this approximation nor the Gamma function version are
+        theoretically sound, as the cost is derived combinatorically.
+        The derivation is not applicable to real valued parameters.
+
+        v is the number of tokens+boundaries and u the number of types
+
+        """
+        if self.types < 2:
+            return 0.0
+        tokens = int(round(self.tokens + self.boundaries))
+        return (self._logfactorial(tokens - 1) -
+                self._logfactorial(self.types - 1) -
+                self._logfactorial(tokens - self.types))
+
 
 class EmCost(Cost):
-    def __init__(self, contr_class, corpusweight=1.0):
+    def __init__(self, contr_class, corpusweight=1.0, nolexcost=False,
+                 freq_distr='zero'):
         self.cc = contr_class
         # Cost variables
         self._lexicon_coding = EmLexiconEncoding()
-        self._corpus_coding = EmCorpusEncoding(self._lexicon_coding)
+        self._corpus_coding = EmCorpusEncoding(
+            self._lexicon_coding, freq_distr=freq_distr)
         self._annot_coding = None
 
         self._corpus_weight_updater = None
 
         #Set corpus weight updater
         self.set_corpus_weight_updater(corpusweight)
+        self.nolexcost = nolexcost
 
         self.counts = Counter()
         self._cached_tokens = None
@@ -168,3 +203,11 @@ class EmCost(Cost):
         self._cached_tokens = None
         self._lexicon_coding.reset(self.counts)
         self._corpus_coding.reset(self.counts)
+
+    def cost(self):
+        cc = self._corpus_coding.get_cost()
+        if self.nolexcost:
+            return cc
+        else:
+            lc = self._lexicon_coding.get_cost()
+            return lc + cc

@@ -58,7 +58,7 @@ class BaselineModel(object):
     penalty = -9999.9
 
     def __init__(self, corpusweight=None, use_skips=False, constr_class=None,
-                 use_em=False, em_substr=None):
+                 use_em=False, em_substr=None, nolexcost=False, freq_distr='zero'):
         """Initialize a new model instance.
 
         Arguments:
@@ -71,6 +71,7 @@ class BaselineModel(object):
                           in certain contexts
             use_em: use em+prune training
             em_substr: substring lexicon
+            nolexcost: ignore lexicon cost with EM+prune
 
         """
 
@@ -90,7 +91,7 @@ class BaselineModel(object):
         # self._annot_coding = None
 
         if use_em:
-            self.cost = EmCost(self.cc, corpusweight)
+            self.cost = EmCost(self.cc, corpusweight, nolexcost, freq_distr)
             self.cost.load_lexicon(em_substr)
         else:
             self.cost = Cost(self.cc, corpusweight)

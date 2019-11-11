@@ -294,6 +294,14 @@ Interactive use (read corpus from user):
             default=1.0, metavar='<float>',
             help="corpus weight parameter (default %(default)s); "
                  "sets the initial value if other tuning options are used")
+    add_arg('--no-lexicon-cost', dest='nolexcost', action='store_true',
+            default=False,
+            help='Leave out the lexicon cost. '
+            'Use this instead of letting --corpusweight go towards infinity. '
+            'Suitable for use with EM+prune, but not standard training.')
+    add_arg('--freq-distr-cost', dest="freq_distr", type=str, default='zero',
+            metavar='<type>', choices=['zero', 'bl'],
+            help="frequency distribution cost for EM+prune")
     add_arg('--weight-threshold', dest='threshold', default=0.01,
             metavar='<float>', type=float,
             help='percentual stopping threshold for corpusweight updaters')
@@ -428,7 +436,9 @@ def main(args):
                            use_skips=args.skips,
                            constr_class=constr_class,
                            use_em=args.em_prune is not None,
-                           em_substr=em_substr
+                           em_substr=em_substr,
+                           nolexcost=args.nolexcost,
+                           freq_distr=args.freq_distr,
                            )
 
     if args.loadsegfile is not None:
