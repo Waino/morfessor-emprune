@@ -906,11 +906,10 @@ class BaselineModel(object):
             if sum(probs) < EPS:
                 # if noting is valid, letterize
                 if t is None:
+                    t = len(compound)
+                sample = t - 1
+                if sample <= 0:
                     sample = None
-                else:
-                    sample = t - 1
-                    if sample <= 0:
-                        sample = None
             else:
                 sample = categorical(pts, probs)
             if sample is not None:
