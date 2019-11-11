@@ -243,8 +243,8 @@ Interactive use (read corpus from user):
             help='Use Expectation-Maximization + pruning. '
             'Load initial substring lexicon from specified file. '
             'Algorithms specified with -a are ignored.')
-    add_arg('--prune-criterion', type=str, default='lexicon',
-            choices=['lexicon', 'mdl'],
+    add_arg('--prune-criterion', type=str, default='autotune',
+            choices=['lexicon', 'mdl', 'autotune'],
             help='Criterion for pruning subwords. '
             '"lexicon" must be combined with --num-morph-types.')
     add_arg('--prune-proportion', type=float, default=0.2, metavar='<float>',
@@ -566,6 +566,13 @@ def main(args):
             elif args.prune_criterion == 'mdl':
                 prune_criterion = model.prune_criterion_mdl(
                     proportion=args.prune_proportion)
+            elif args.prune_criterion == 'autotune':
+                if args.morphtypes is None:
+                    raise Exception('Must specify --num-morph-types')
+                prune_criterion = model.prune_criterion_autotune(
+                    proportion=args.prune_proportion,
+                    goal_lexicon=args.morphtypes)
+                model.em_autotune_alpha = True
             if args.maxepochs is None:
                 # em-prune needs maxepochs to be set
                 args.maxepochs = 15

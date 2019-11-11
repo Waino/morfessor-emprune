@@ -93,6 +93,7 @@ class BaselineModel(object):
         if use_em:
             self.cost = EmCost(self.cc, corpusweight, nolexcost, freq_distr)
             self.cost.load_lexicon(em_substr)
+            self.em_autotune_alpha = False  # overridden later
         else:
             self.cost = Cost(self.cc, corpusweight)
 
@@ -496,7 +497,10 @@ class BaselineModel(object):
 
     def prune_lexicon(self, prune_criterion):
         self.cost.reset()
-        original_cost = self.get_cost()
+        if self.em_autotune_alpha:
+            original_cost = self.cost.cost_before_tuning()
+        else:
+            original_cost = self.get_cost()
         #print('original cost {}'.format(original_cost))
         constructions = list(w for w, c in self.cost.counts.most_common())
         n_tot = len(constructions)
@@ -515,7 +519,10 @@ class BaselineModel(object):
             self.cost.update(construction, -count)
             for replcons in replacement:
                 self.cost.update(replcons, count)
-            cost = self.get_cost()
+            if self.em_autotune_alpha:
+                cost = self.cost.cost_before_tuning()
+            else:
+                cost = self.get_cost()
             # revert change
             self.cost.update(construction, count)
             for replcons in replacement:
@@ -523,7 +530,6 @@ class BaselineModel(object):
             #print('cost when replaing {} -> {} is {}'.format(
             #    construction, replacement, cost))
             costs.append((cost, construction))
-        costs = sorted(costs)
         pruned, done = prune_criterion(costs, original_cost, n_tot)
         n_pruned = len(pruned)
         for construction in pruned:
@@ -534,9 +540,73 @@ class BaselineModel(object):
         #print('pruned {} done: {}'.format(n_pruned, done))
         return self.get_cost(), done
 
+    def prune_criterion_autotune(self, proportion, goal_lexicon):
+        # set corpus cost so that lexicon size and mdl criterion become equal
+        def prune_criterion(costs_before_tuning, original_cost, n_tot):
+            orig_lc, orig_cc = original_cost
+            tipping_points = []
+            always_prune = 0
+            # some are already kept
+            always_keep = n_tot - len(costs_before_tuning)
+            for ((lc, cc), construction) in costs_before_tuning:
+                delta_lc = lc - orig_lc
+                delta_cc = cc - orig_cc
+                # tuning can't affect if both deltas have the same sign
+                if delta_lc < 0 and delta_cc < 0:
+                    always_prune += 1
+                    continue
+                elif delta_lc > 0 and delta_cc > 0:
+                    always_keep += 1
+                    continue
+                alpha = abs(delta_cc / delta_lc)
+                tipping_points.append(alpha)
+            print(len(tipping_points), always_prune, always_keep, len(costs_before_tuning))
+            if len(tipping_points) + always_keep < goal_lexicon:
+                _logger.info('cannot reach goal lexicon by tuning: too few prunable left')
+                alpha = self.get_corpus_coding_weight()
+            elif always_keep > goal_lexicon:
+                _logger.info('cannot reach goal lexicon by tuning: too many always keep')
+                alpha = self.get_corpus_coding_weight()
+            else:
+                tipping_points.sort()
+                print('aiming to keep', int(goal_lexicon - always_keep))
+                alpha = tipping_points[-int(goal_lexicon - always_keep)]
+                self.set_corpus_coding_weight(alpha)
+                _logger.info("Corpus weight set to {}".format(alpha))
+                _logger.info('always keep {} always prune {} tipping point {}'.format(
+                    always_keep, always_prune, alpha))
+            costs = []
+            for ((lc, cc), construction) in costs_before_tuning:
+                cost = lc + (alpha * cc)
+                costs.append((cost, construction))
+            costs.sort()
+            original_cost = orig_lc + (alpha * orig_cc)
+            print('orig', original_cost)
+            #for (cost, cons) in costs:
+            #    print(cost, cost > original_cost, cons)
+            
+            # almost same as prune_criterion_mdl
+            max_prune_prop = int(math.ceil(n_tot * proportion))
+            max_prune_goal = max(0, int(n_tot - goal_lexicon))
+            pruned = []
+            for (i, (cost, cons)) in enumerate(costs):
+                if i >= max_prune_prop:
+                    return pruned, False
+                #print('comparing', i, cost, original_cost)
+                if cost > original_cost:
+                    remaining = n_tot - len(pruned)
+                    done = remaining <= goal_lexicon
+                    return pruned, done
+                pruned.append(cons)
+            # pruned everything
+            _logger.info('pruned everything!')
+            return pruned, True
+        return prune_criterion
+
     def prune_criterion_lexicon_size(self, proportion, goal_lexicon):
         # prune at most proportion. prune until goal_lexicon is reached
         def prune_criterion(costs, original_cost, n_tot):
+            costs = sorted(costs)
             max_prune_prop = int(math.ceil(n_tot * proportion))
             max_prune_goal = max(0, int(n_tot - goal_lexicon))
             max_prune = min(max_prune_prop, max_prune_goal)
@@ -548,6 +618,7 @@ class BaselineModel(object):
     def prune_criterion_mdl(self, proportion):
         # prune at most proportion. only prune if it lowers cost.
         def prune_criterion(costs, original_cost, n_tot):
+            costs = sorted(costs)
             max_prune_prop = int(math.ceil(n_tot * proportion))
             pruned = []
             for (i, (cost, cons)) in enumerate(costs):

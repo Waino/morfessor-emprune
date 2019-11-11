@@ -46,6 +46,16 @@ class Cost(object):
         cc = self._corpus_coding.get_cost()
         return lc + cc
 
+    def cost_before_tuning(self):
+        # invariant to current tuning: reset corpus weight
+        current_weight = self._corpus_coding.weight
+        self._corpus_coding.weight = 1.
+        lc = self._lexicon_coding.get_cost()
+        cc = self._corpus_coding.get_cost()
+        # restore corpus weight
+        self._corpus_coding.weight = current_weight
+        return (lc, cc)
+
     def update(self, construction, delta):
         if delta == 0:
             return
