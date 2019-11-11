@@ -477,6 +477,18 @@ class BaselineModel(object):
             tot_cost += cost
         return expected, tot_cost
 
+    def e_step_hard(self, maxlen):
+        expected = collections.Counter()
+        compounds = list(self.get_compound_counts())
+        tot_cost = 0
+        for compound, freq in compounds:
+            constructions, cost = self.viterbi_segment(
+                compound, addcount=0.0, maxlen=maxlen)
+            for cons in constructions:
+                expected[cons] += freq
+            tot_cost += cost
+        return expected, tot_cost
+
     def m_step(self, expected, expected_freq_threshold):
         # prune out infrequent
         # FIXME: is protecting length 1 useful? max(c, 1e-6))?
@@ -562,7 +574,8 @@ class BaselineModel(object):
                 tipping_points.append(alpha)
             print(len(tipping_points), always_prune, always_keep, len(costs_before_tuning))
             if len(tipping_points) + always_keep < goal_lexicon:
-                _logger.info('cannot reach goal lexicon by tuning: too few prunable left')
+                # this is not true
+                #_logger.info('cannot reach goal lexicon by tuning: too few prunable left')
                 alpha = self.get_corpus_coding_weight()
             elif always_keep > goal_lexicon:
                 _logger.info('cannot reach goal lexicon by tuning: too many always keep')
@@ -595,7 +608,7 @@ class BaselineModel(object):
                 #print('comparing', i, cost, original_cost)
                 if cost > original_cost:
                     remaining = n_tot - len(pruned)
-                    done = remaining <= goal_lexicon
+                    done = remaining <= goal_lexicon or len(pruned) == 0
                     return pruned, done
                 pruned.append(cons)
             # pruned everything
@@ -635,12 +648,16 @@ class BaselineModel(object):
     def train_em_prune(self, prune_criterion,
                        max_epochs=5, sub_epochs=3,
                        expected_freq_threshold=0.5,
-                       maxlen=30):
+                       maxlen=30, use_lateen=False):
         done = False
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
-                expected, cost = self.e_step(maxlen=maxlen)
+                if use_lateen and sub_epoch == sub_epochs - 1:
+                    _logger.info('Lateen EM: using Viterbi e-step')
+                    expected, cost = self.e_step_hard(maxlen=maxlen)
+                else:
+                    expected, cost = self.e_step(maxlen=maxlen)
                 _logger.info("E-step cost: %s tokens: %s" % (cost, self.cost.all_tokens()))
                 # M-step
                 self.m_step(

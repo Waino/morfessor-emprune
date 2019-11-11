@@ -258,6 +258,8 @@ Interactive use (read corpus from user):
             type=float, default=0.5, metavar='<float>',
             help='Also prune subwords with expected count less than this. '
             '(default "%(default)s"). ')
+    add_arg('--lateen', dest='use_lateen', action='store_true',
+            help='Use Lateen EM')
     # also use these: --num-morph-types, --max-epochs, --viterbi-maxlen
 
     # Options for corpusweight tuning
@@ -581,7 +583,8 @@ def main(args):
                 max_epochs=args.maxepochs,
                 sub_epochs=args.em_subepochs,
                 expected_freq_threshold=args.expected_freq_threshold,
-                maxlen=args.viterbimaxlen)
+                maxlen=args.viterbimaxlen,
+                use_lateen=args.use_lateen)
         elif args.trainmode == 'init':
             c = model.load_data(data)
         elif args.trainmode == 'init+batch':
