@@ -46,6 +46,17 @@ MODE_SEGMENT_ONLY = 'segment_only'
 
 EPS = 1e-8
 
+PRUNE_ALWAYS = 0
+PRUNE_GAIN = 1
+PRUNE_LOSS = 2
+PRUNE_NEVER_DBL = 3
+PRUNE_NEVER_NO_ALT = 4
+PRUNE_NEVER_CHAR = 5
+
+PruneStats = collections.namedtuple('PruneStats',
+    ['construction', 'threshold_alpha', 'delta_lc', 'delta_cc', 'delta_cost', 'decision'])
+
+
 class BaselineModel(object):
     """Morfessor Baseline model class.
 
@@ -509,21 +520,29 @@ class BaselineModel(object):
 
     def prune_lexicon(self, prune_criterion):
         self.cost.reset()
-        if self.em_autotune_alpha:
-            original_cost = self.cost.cost_before_tuning()
-        else:
-            original_cost = self.get_cost()
-        #print('original cost {}'.format(original_cost))
+        prune_stats = list(self.compute_prune_stats())
+        pruned, done = prune_criterion(prune_stats)
+        n_pruned = len(pruned)
+        for construction in pruned:
+            # prune out selected constructions
+            count = self.cost.counts[construction]
+            self.cost.update(construction, -count)
+            del self.cost.counts[construction]
+        return self.get_cost(), done
+
+    def compute_prune_stats(self):
+        orig_lc, orig_cc = self.cost.cost_before_tuning()
         constructions = list(w for w, c in self.cost.counts.most_common())
-        n_tot = len(constructions)
-        costs = []
+        current_alpha = self.get_corpus_coding_weight()
         for construction in constructions:
             if len(construction) == 1:
+                yield PruneStats(construction, -math.inf, 0, 0, 0, PRUNE_NEVER_CHAR)
                 continue
             # assume all probability mass goes to viterbi segmentation
             replacement, _ = self.viterbi_segment(
                 construction, taboo=[construction], addcount=0)
             if replacement == construction:
+                yield PruneStats(construction, -math.inf, 0, 0, 0, PRUNE_NEVER_NO_ALT)
                 continue
             count = self.cost.counts[construction]
 
@@ -531,115 +550,108 @@ class BaselineModel(object):
             self.cost.update(construction, -count)
             for replcons in replacement:
                 self.cost.update(replcons, count)
-            if self.em_autotune_alpha:
-                cost = self.cost.cost_before_tuning()
-            else:
-                cost = self.get_cost()
+            lc, cc = self.cost.cost_before_tuning()
             # revert change
             self.cost.update(construction, count)
             for replcons in replacement:
                 self.cost.update(replcons, -count)
-            #print('cost when replaing {} -> {} is {}'.format(
-            #    construction, replacement, cost))
-            costs.append((cost, construction))
-        pruned, done = prune_criterion(costs, original_cost, n_tot)
-        n_pruned = len(pruned)
-        for construction in pruned:
-            # prune out selected constructions
-            count = self.cost.counts[construction]
-            self.cost.update(construction, -count)
-            del self.cost.counts[construction]
-        #print('pruned {} done: {}'.format(n_pruned, done))
-        return self.get_cost(), done
 
-    def prune_criterion_autotune(self, proportion, goal_lexicon):
-        # set corpus cost so that lexicon size and mdl criterion become equal
-        def prune_criterion(costs_before_tuning, original_cost, n_tot):
-            orig_lc, orig_cc = original_cost
-            tipping_points = []
-            always_prune = 0
-            # some are already kept
-            always_keep = n_tot - len(costs_before_tuning)
-            for ((lc, cc), construction) in costs_before_tuning:
-                delta_lc = lc - orig_lc
-                delta_cc = cc - orig_cc
-                # tuning can't affect if both deltas have the same sign
-                if delta_lc < 0 and delta_cc < 0:
-                    always_prune += 1
-                    continue
-                elif delta_lc > 0 and delta_cc > 0:
-                    always_keep += 1
-                    continue
-                alpha = abs(delta_lc / delta_cc)
-                tipping_points.append(alpha)
-            print(len(tipping_points), always_prune, always_keep, len(costs_before_tuning))
-            if len(tipping_points) + always_keep < goal_lexicon:
-                # this is not true
-                #_logger.info('cannot reach goal lexicon by tuning: too few prunable left')
-                alpha = self.get_corpus_coding_weight()
-            elif always_keep > goal_lexicon:
-                _logger.info('cannot reach goal lexicon by tuning: too many always keep')
-                alpha = self.get_corpus_coding_weight()
-            else:
-                tipping_points.sort()
-                print('aiming to keep', int(goal_lexicon - always_keep))
-                alpha = tipping_points[-int(goal_lexicon - always_keep)]
-                self.set_corpus_coding_weight(alpha)
-                _logger.info("Corpus weight set to {}".format(alpha))
-                _logger.info('always keep {} always prune {} tipping point {}'.format(
-                    always_keep, always_prune, alpha))
-            costs = []
-            for ((lc, cc), construction) in costs_before_tuning:
-                cost = lc + (alpha * cc)
-                costs.append((cost, construction))
-            costs.sort()
-            original_cost = orig_lc + (alpha * orig_cc)
-            print('orig', original_cost)
-            #for (cost, cons) in costs:
-            #    print(cost, cost > original_cost, cons)
-            
-            # almost same as prune_criterion_mdl
+            delta_lc = lc - orig_lc
+            delta_cc = cc - orig_cc
+            threshold_alpha, delta_cost, decision = self.prune_cost_at_alpha(
+                current_alpha, delta_lc, delta_cc)
+            yield PruneStats(construction,
+                             threshold_alpha,
+                             delta_lc, delta_cc,
+                             delta_cost, decision)
+
+    def prune_cost_at_alpha(self, alpha, delta_lc, delta_cc):
+        delta_cost = delta_lc + (alpha * delta_cc)
+        # tuning can't affect if both deltas have the same sign
+        if delta_lc < 0 and delta_cc < 0:
+            decision = PRUNE_ALWAYS
+            threshold_alpha = math.inf
+        elif delta_lc > 0 and delta_cc > 0:
+            decision = PRUNE_NEVER_DBL
+            threshold_alpha = -math.inf
+        else:
+            # if deltas have opposite sign,
+            # compute the threshold alpha for which they cancel out
+            threshold_alpha = abs(delta_lc / (delta_cc + EPS))
+            # decicion based on current alpha
+            decision = PRUNE_GAIN if delta_cost < 0 else PRUNE_LOSS
+        return threshold_alpha, delta_cost, decision
+
+    def reweight_prune_stats(self, prune_stats, optimal_alpha):
+        for stat in prune_stats:
+            threshold_alpha, delta_cost, decision = self.prune_cost_at_alpha(
+                optimal_alpha, stat.delta_lc, stat.delta_cc)
+            yield PruneStats(stat.construction,
+                             stat.threshold_alpha,
+                             stat.delta_lc, stat.delta_cc,
+                             delta_cost, decision)
+
+    def prune_criterion_lexicon_size(self, proportion, goal_lexicon):
+        # prune at most proportion. prune until goal_lexicon is reached
+        def prune_criterion(prune_stats):
+            n_tot = len(prune_stats)
             max_prune_prop = int(math.ceil(n_tot * proportion))
             max_prune_goal = max(0, int(n_tot - goal_lexicon))
+            max_prune = min(max_prune_prop, max_prune_goal)
+            # done unless epoch quota was the stopping reason
+            done = max_prune_goal <= max_prune_prop
+            prune_stats.sort(key=lambda x: (x.decision, x.delta_cost))
+            pruned = [x.construction for x in prune_stats]
+            return pruned, done
+        return prune_criterion
+
+    def prune_criterion_mdl(self, proportion):
+        # prune at most proportion. prune based on decision
+        def prune_criterion(prune_stats):
+            n_tot = len(prune_stats)
+            max_prune_prop = int(math.ceil(n_tot * proportion))
+            prune_stats.sort(key=lambda x: (x.decision, x.delta_cost))
             pruned = []
-            for (i, (cost, cons)) in enumerate(costs):
+            for (i, stat) in enumerate(prune_stats):
                 if i >= max_prune_prop:
                     return pruned, False
-                #print('comparing', i, cost, original_cost)
-                if cost > original_cost:
-                    remaining = n_tot - len(pruned)
-                    done = remaining <= goal_lexicon or len(pruned) == 0
-                    return pruned, done
-                pruned.append(cons)
+                if stat.decision >= PRUNE_LOSS:
+                    return pruned, True
+                pruned.append(stat.construction)
             # pruned everything
             _logger.info('pruned everything!')
             return pruned, True
         return prune_criterion
 
-    def prune_criterion_lexicon_size(self, proportion, goal_lexicon):
-        # prune at most proportion. prune until goal_lexicon is reached
-        def prune_criterion(costs, original_cost, n_tot):
-            costs = sorted(costs)
+    def prune_criterion_autotune(self, proportion, goal_lexicon):
+        # determine optimal alpha. prune at most proportion. prune based on decision
+        def prune_criterion(prune_stats):
+            # determine optimal alpha
+            prune_stats.sort(key=lambda x: (x.decision, -x.threshold_alpha))
+            optimal_alpha = prune_stats[-int(goal_lexicon)].threshold_alpha
+            if optimal_alpha == -math.inf:
+                _logger.info('cannot reach goal lexicon by tuning: too many always keep')
+                optimal_alpha = min(x.threshold_alpha for x in prune_stats
+                                    if x.decision in (PRUNE_GAIN, PRUNE_LOSS))
+            _logger.info("Corpus weight set to {}".format(optimal_alpha))
+            self.set_corpus_coding_weight(optimal_alpha)
+            prune_stats = list(self.reweight_prune_stats(prune_stats, optimal_alpha))
+
+            # continue with pruning
+            n_tot = len(prune_stats)
             max_prune_prop = int(math.ceil(n_tot * proportion))
             max_prune_goal = max(0, int(n_tot - goal_lexicon))
             max_prune = min(max_prune_prop, max_prune_goal)
+            # done unless epoch quota was the stopping reason
             done = max_prune_goal <= max_prune_prop
-            pruned = [cons for (cost, cons) in costs[:max_prune]]
-            return pruned, done
-        return prune_criterion
-
-    def prune_criterion_mdl(self, proportion):
-        # prune at most proportion. only prune if it lowers cost.
-        def prune_criterion(costs, original_cost, n_tot):
-            costs = sorted(costs)
-            max_prune_prop = int(math.ceil(n_tot * proportion))
+            prune_stats.sort(key=lambda x: (x.decision, x.delta_cost))
             pruned = []
-            for (i, (cost, cons)) in enumerate(costs):
-                if i >= max_prune_prop:
-                    return pruned, False
-                if cost > original_cost:
+            for (i, stat) in enumerate(prune_stats):
+                if i >= max_prune:
+                    return pruned, done
+                if stat.decision >= PRUNE_LOSS:
                     return pruned, True
-                pruned.append(cons)
+                pruned.append(stat.construction)
             # pruned everything
             _logger.info('pruned everything!')
             return pruned, True
