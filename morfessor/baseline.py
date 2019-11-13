@@ -570,7 +570,7 @@ class BaselineModel(object):
                 elif delta_lc > 0 and delta_cc > 0:
                     always_keep += 1
                     continue
-                alpha = abs(delta_cc / delta_lc)
+                alpha = abs(delta_lc / delta_cc)
                 tipping_points.append(alpha)
             print(len(tipping_points), always_prune, always_keep, len(costs_before_tuning))
             if len(tipping_points) + always_keep < goal_lexicon:
