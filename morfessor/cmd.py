@@ -118,6 +118,10 @@ Interactive use (read corpus from user):
             help="save final model to file in reduced form (pickled model "
             "object). A model in reduced form can only be used for "
             "segmentation of new words.")
+    add_arg('--save-pseudomodel', dest='savepseudomodel', default=None,
+            metavar='<file>',
+            help='Approximately convert an EM-trained model into a Baseline model, '
+            'by storing the Viterbi segmentation of the training words.')
     add_arg('-x', '--lexicon', dest="lexfile", default=None, metavar='<file>',
             help="output final lexicon to given file")
     add_arg('--save-parameters', dest='saveparamsfile', default=None,
@@ -660,6 +664,11 @@ def main(args):
             io.write_expected_file(args.savesegfile, model.cost.get_expected())
         else:
             io.write_segmentation_file(args.savesegfile, model.get_segmentations())
+
+    if args.savepseudomodel is not None:
+        io.write_segmentation_file(
+            args.savepseudomodel,
+            model.get_pseudomodel(args.viterbismooth, args.viterbimaxlen))
 
     # Output lexicon
     if args.lexfile is not None:

@@ -432,6 +432,16 @@ class BaselineModel(object):
             if c > 0:
                 yield c, w, self.segment(w)
 
+    def get_pseudomodel(self, viterbismooth, viterbimaxlen):
+        self._check_segment_only()
+        for w in sorted(self._analyses.keys()):
+            node = self._analyses[w]
+            if node.rcount == 0:
+                continue
+            constructions, _ = self.viterbi_segment(
+                w, viterbismooth, viterbimaxlen)
+            yield (node.rcount, w, constructions)
+
     def load_data(self, data):
         """Load data to initialize the model for batch training.
 
