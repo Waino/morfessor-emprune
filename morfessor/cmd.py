@@ -250,7 +250,7 @@ Interactive use (read corpus from user):
     add_arg('--prune-criterion', type=str, default='autotune',
             choices=['lexicon', 'mdl', 'autotune'],
             help='Criterion for pruning subwords. '
-            '"lexicon" must be combined with --num-morph-types.')
+            '"lexicon" and "autotune" must be combined with --num-morph-types.')
     add_arg('--prune-proportion', type=float, default=0.2, metavar='<float>',
             help='Prune at most this proportion of subwords per epoch. '
             '(default "%(default)s")')
