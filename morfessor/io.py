@@ -32,7 +32,7 @@ class MorfessorIO(object):
     """
 
     def __init__(self, encoding=None, construction_separator=' + ',
-                 comment_start='#', compound_separator='\s+',
+                 comment_start='#', compound_separator=r'\s+',
                  atom_separator=None, lowercase=False):
         self.encoding = encoding
         self.construction_separator = construction_separator
@@ -82,7 +82,7 @@ class MorfessorIO(object):
         <count> <construction1><sep><construction2><sep>...<constructionN>
 
         """
-        _logger.info("Reading segmentations from '%s'..." % file_name)
+        _logger.info("Reading segmentations from '%s'...", file_name)
         for line in self._read_text_file(file_name):
             if has_counts:
                 count, compound_str = line.split(' ', 1)
@@ -106,7 +106,7 @@ class MorfessorIO(object):
         <count> <construction1><sep><construction2><sep>...<constructionN>
 
         """
-        _logger.info("Saving segmentations to '%s'..." % file_name)
+        _logger.info("Saving segmentations to '%s'...", file_name)
         with self._open_text_file_write(file_name) as file_obj:
             d = datetime.datetime.now().replace(microsecond=0)
             file_obj.write("# Output from Morfessor Baseline %s, %s\n" %

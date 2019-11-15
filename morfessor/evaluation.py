@@ -13,11 +13,12 @@ EvaluationConfig = collections.namedtuple('EvaluationConfig',
 
 FORMAT_STRINGS = {
     'default': """Filename   : {name}
-Num samples: {samplesize_count}
-Sample size: {samplesize_avg}
-F-score    : {fscore_avg:.3}
-Precision  : {precision_avg:.3}
-Recall     : {recall_avg:.3}""",
+Num samples  : {samplesize_count}
+Sample size  : {samplesize_avg}
+F-score      : {fscore_avg:.3}
+Precision    : {precision_avg:.3}
+Recall       : {recall_avg:.3}
+Type-accuracy: {acc_avg:.3}""",
     'table': "{name:10} {precision_avg:6.3} {recall_avg:6.3} {fscore_avg:6.3}",
     'latex': "{name} & {precision_avg:.3} &"
              " {recall_avg:.3} & {fscore_avg:.3} \\\\"}
@@ -52,6 +53,7 @@ class MorfessorEvaluationResult(object):
         self.precision = []
         self.recall = []
         self.fscore = []
+        self.acc = []
         self.samplesize = []
 
         self._cache = None
@@ -64,12 +66,13 @@ class MorfessorEvaluationResult(object):
 
         return self._cache[item]
 
-    def add_data_point(self, precision, recall, f_score, sample_size):
+    def add_data_point(self, precision, recall, f_score, acc, sample_size):
         """Method used by MorfessorEvaluation to add the results of a single
         sample to the object"""
         self.precision.append(precision)
         self.recall.append(recall)
         self.fscore.append(f_score)
+        self.acc.append(acc)
         self.samplesize.append(sample_size)
 
         #clear cache
@@ -83,7 +86,7 @@ class MorfessorEvaluationResult(object):
         """ Pre calculate all variable / function combinations and put them in
         cache"""
         self._cache = {'{}_{}'.format(val, func_name): func(getattr(self, val))
-                       for val in ('precision', 'recall', 'fscore',
+                       for val in ('precision', 'recall', 'fscore', 'acc',
                                    'samplesize')
                        for func_name, func in self.print_functions.items()}
         self._cache.update(self.meta_data)
@@ -109,8 +112,9 @@ class MorfessorEvaluation(object):
     reference_annotations is a standard annotation dictionary:
     {compound => ([annoation1],.. ) }
     """
-    def __init__(self, reference_annotations):
+    def __init__(self, reference_annotations, allow_missing_hyps=False):
         self.reference = {}
+        self.allow_missing_hyps = allow_missing_hyps
 
         for compound, analyses in reference_annotations.items():
             self.reference[compound] = list(
@@ -126,7 +130,7 @@ class MorfessorEvaluation(object):
         #TODO: What is a reasonable limit to warn about a too small testset?
         if len(self.reference) < (configuration.num_samples *
                                   configuration.sample_size):
-            _logger.warn("The test set is too small for this sample size")
+            _logger.warning("The test set is too small for this sample size")
 
         compound_list = sorted(self.reference.keys())
         self._samples[configuration] = [
@@ -141,7 +145,7 @@ class MorfessorEvaluation(object):
         method caches the samples in the _samples variable.
 
         """
-        if not configuration in self._samples:
+        if configuration not in self._samples:
             self._create_samples(configuration)
         return self._samples[configuration]
 
@@ -153,10 +157,14 @@ class MorfessorEvaluation(object):
             diff = len(set(ref) - set(pred))
             return (len(ref) - diff) / float(len(ref))
 
-        wordlist = sorted(set(prediction.keys()) & set(self.reference.keys()))
+        ref_keys = set(self.reference.keys())
+        wordlist = sorted(set(prediction.keys()) & ref_keys)
+        if not self.allow_missing_hyps and len(wordlist) != len(ref_keys):
+            raise Exception('{} hypotheses missing'.format(len(ref_keys) - len(wordlist)))
 
         recall_sum = 0.0
         precis_sum = 0.0
+        acc_sum = 0.0
 
         for word in wordlist:
             if len(word) < 2:
@@ -169,12 +177,18 @@ class MorfessorEvaluation(object):
             precis_sum += max(calc_prop_distance(p, r)
                               for p, r in product(prediction[word],
                                                   self.reference[word]))
+            if any(hyp in self.reference[word] for hyp in prediction[word]):
+                acc_sum += 1
 
         precision = precis_sum / len(wordlist)
         recall = recall_sum / len(wordlist)
-        f_score = 2.0 / (1.0 / precision + 1.0 / recall)
+        if precision == 0 or recall == 0:
+            f_score = 0
+        else:
+            f_score = 2.0 / (1.0 / precision + 1.0 / recall)
+        acc = acc_sum / len(wordlist)
 
-        return precision, recall, f_score, len(wordlist)
+        return precision, recall, f_score, acc, len(wordlist)
 
     @staticmethod
     def _segmentation_indices(annotation):
@@ -198,7 +212,7 @@ class MorfessorEvaluation(object):
         mer = MorfessorEvaluationResult(meta_data)
 
         for i, sample in enumerate(self.get_samples(configuration)):
-            _logger.debug("Evaluating sample {}".format(i))
+            _logger.debug("Evaluating sample %s", i)
             prediction = {}
             for compound in sample:
                 prediction[compound] = [tuple(self._segmentation_indices(
@@ -213,14 +227,8 @@ class MorfessorEvaluation(object):
                               meta_data=None):
         """Method for evaluating an existing segmentation"""
 
-        def merge_constructions(constructions):
-            compound = constructions[0]
-            for i in range(1, len(constructions)):
-                compound = compound + constructions[i]
-            return compound
-
-        segmentation = {merge_constructions(x[1]):
-                        [tuple(self._segmentation_indices(x[1]))]
+        segmentation = {x[1]:
+                        [tuple(self._segmentation_indices(x[2]))]
                         for x in segmentation}
 
         if meta_data is None:
@@ -229,7 +237,7 @@ class MorfessorEvaluation(object):
         mer = MorfessorEvaluationResult(meta_data)
 
         for i, sample in enumerate(self.get_samples(configuration)):
-            _logger.debug("Evaluating sample {}".format(i))
+            _logger.debug("Evaluating sample %s", i)
 
             prediction = {k: v for k, v in segmentation.items() if k in sample}
             mer.add_data_point(*self._evaluate(prediction))

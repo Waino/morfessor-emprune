@@ -40,7 +40,7 @@ def get_default_argparser():
         description="""
 Morfessor %s
 
-Copyright (c) 2012-2017, Sami Virpioja, Peter Smit, and Stig-Arne Grönroos.
+Copyright (c) 2012-2019, Sami Virpioja, Peter Smit, and Stig-Arne Grönroos.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -148,7 +148,7 @@ Interactive use (read corpus from user):
     add_arg('--atom-separator', dest="separator", type=_str, default=None,
             metavar='<regexp>',
             help="atom separator regexp (default %(default)s)")
-    add_arg('--compound-separator', dest="cseparator", type=_str, default='\s+',
+    add_arg('--compound-separator', dest="cseparator", type=_str, default=r'\s+',
             metavar='<regexp>',
             help="compound separator regexp (default '%(default)s')")
     add_arg('--analysis-separator', dest='analysisseparator', type=_str,
@@ -227,7 +227,7 @@ Interactive use (read corpus from user):
     add_arg('--online-epochint', dest="epochinterval", type=int,
             default=10000, metavar='<int>',
             help="epoch interval for online training (default %(default)s)")
-    add_arg('--viterbi-smoothing', dest="viterbismooth", default=1.0,
+    add_arg('--viterbi-smoothing', dest="viterbismooth", default=0,
             type=float, metavar='<float>',
             help=("additive smoothing parameter for Viterbi training "
                   "and segmentation (default %(default)s)"))
@@ -812,7 +812,12 @@ def get_evaluation_argparser():
     add_arg('--num-samples', dest='numsamples', type=int, metavar='<int>',
             default=10, help='number of samples to take for testing')
     add_arg('--sample-size', dest='samplesize', type=int, metavar='<int>',
-            default=1000, help='size of each testing samples')
+            default=1000, help='size of each testing samples. '
+                               '-1 uses all testing examples in a single sample.')
+    add_arg('--allow-missing-hypotheses', default=False, action='store_true',
+            help='If some segmentations are found in the reference '
+                 'but are missing from the hypothesis, '
+                 'simply ignore them.')
 
     add_arg = parser.add_argument_group('formatting options').add_argument
     add_arg('--format-string', dest='formatstring', metavar='<format>',
@@ -859,7 +864,7 @@ def get_evaluation_argparser():
     add_arg = parser.add_argument
     add_arg('goldstandard', metavar='<goldstandard>', nargs=1,
             help='gold standard file in standard annotation format')
-    add_arg('models', metavar='<model>', nargs='+',
+    add_arg('models', metavar='<model>', nargs='*',
             help='model files to segment (either binary or Morfessor 1.0 style'
                  ' segmentation models).')
     add_arg('-t', '--testsegmentation', dest='test_segmentations', default=[],
@@ -874,14 +879,22 @@ def main_evaluation(args):
     """ Separate main for running evaluation and statistical significance
     testing. Takes as argument the results of an get_evaluation_argparser()
     """
+    configure_logger(_logger, args)
+
     io = MorfessorIO(encoding=args.encoding)
 
-    ev = MorfessorEvaluation(io.read_annotations_file(args.goldstandard[0]))
+    ev = MorfessorEvaluation(
+        io.read_annotations_file(args.goldstandard[0]),
+        allow_missing_hyps=args.allow_missing_hypotheses)
 
     results = []
 
-    sample_size = args.samplesize
-    num_samples = args.numsamples
+    if args.samplesize > 0:
+        sample_size = args.samplesize
+        num_samples = args.numsamples
+    else:
+        sample_size = len(ev.reference)
+        num_samples = 1
 
     f_string = args.formatstring
     if f_string is None:
