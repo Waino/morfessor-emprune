@@ -644,6 +644,9 @@ def main(args):
         _logger.info("Final cost: %s" % c)
         _logger.info("Final corpus weight: %s" % model.get_corpus_coding_weight())
         _logger.info("Training time: %.3fs" % (te - ts))
+        lc, cc = model.cost.cost_before_tuning()
+        _logger.info("Final unweighted corpus cost: %s lexicon cost: %s" % (cc, lc))
+
     else:
         _logger.warning("No training data files specified.")
 

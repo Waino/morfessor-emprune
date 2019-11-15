@@ -679,8 +679,10 @@ class BaselineModel(object):
                 break
             # cost-based pruning of lexicon
             cost, done = self.prune_lexicon(prune_criterion)
+            lc, cc = self.cost.cost_before_tuning()
             _logger.info("Cost after pruning: %s types: %s tokens: %s" %
                 (cost, self.cost.types(), self.cost.all_tokens()))
+            _logger.info("Unweighted corpus cost: %s lexicon cost: %s" % (cc, lc))
             if done:
                 _logger.info('Reached pruning goal')
         return epoch, cost
@@ -747,10 +749,12 @@ class BaselineModel(object):
             forced_epochs = max(forced_epochs, self._epoch_update(epochs))
             oldcost = newcost
             newcost = self.get_cost()
+            lc, cc = self.cost.cost_before_tuning()
 
             self._epoch_checks()
 
             _logger.info("Epochs: %s\tCost: %s" % (epochs, newcost))
+            _logger.info("Unweighted corpus cost: %s lexicon cost: %s" % (cc, lc))
             if (forced_epochs == 0 and
                     newcost >= oldcost - finish_threshold *
                     self.cost.compound_tokens()):
