@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 import collections
+import copy
 import heapq
 import itertools
 import logging
@@ -528,11 +529,22 @@ class BaselineModel(object):
         # set model parameters
         self.cost.counts = expected
 
-    def prune_lexicon(self, prune_criterion):
+    def prune_lexicon(self, prune_criterion, lateen, maxlen, expected_freq_threshold):
         self.cost.reset()
+        if lateen == 'prune':
+            em_params = copy.deepcopy(self.cost)
+            _logger.info('Lateen Prune: using Viterbi counts for pruning')
+            expected, cost = self.e_step_hard(maxlen=maxlen)
+            self.m_step(
+                expected,
+                expected_freq_threshold=expected_freq_threshold)
         prune_stats = list(self.compute_prune_stats())
         pruned, done = prune_criterion(prune_stats)
         n_pruned = len(pruned)
+        if lateen == 'prune':
+            _logger.info('Lateen Prune: restoring soft EM counts')
+            del self.cost
+            self.cost = em_params
         for construction in pruned:
             # prune out selected constructions
             count = self.cost.counts[construction]
@@ -670,12 +682,12 @@ class BaselineModel(object):
     def train_em_prune(self, prune_criterion,
                        max_epochs=5, sub_epochs=3,
                        expected_freq_threshold=0.5,
-                       maxlen=30, use_lateen=False):
+                       maxlen=30, lateen='none'):
         done = False
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
                 # E-step
-                if use_lateen and sub_epoch == sub_epochs - 1:
+                if lateen == 'full' and sub_epoch == sub_epochs - 1:
                     _logger.info('Lateen EM: using Viterbi e-step')
                     expected, cost = self.e_step_hard(maxlen=maxlen)
                 else:
@@ -688,7 +700,8 @@ class BaselineModel(object):
             if done:
                 break
             # cost-based pruning of lexicon
-            cost, done = self.prune_lexicon(prune_criterion)
+            cost, done = self.prune_lexicon(prune_criterion, lateen,
+                maxlen=maxlen, expected_freq_threshold=expected_freq_threshold)
             lc, cc = self.cost.cost_before_tuning()
             _logger.info("Cost after pruning: %s types: %s tokens: %s" %
                 (cost, self.cost.types(), self.cost.all_tokens()))
