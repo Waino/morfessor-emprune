@@ -623,7 +623,7 @@ class BaselineModel(object):
             # done unless epoch quota was the stopping reason
             done = max_prune_goal <= max_prune_prop
             prune_stats.sort(key=lambda x: (x.decision, x.delta_cost))
-            pruned = [x.construction for x in prune_stats]
+            pruned = [x.construction for x in prune_stats[:max_prune]]
             return pruned, done
         return prune_criterion
 
@@ -708,7 +708,7 @@ class BaselineModel(object):
             _logger.info("Unweighted corpus cost: %s lexicon cost: %s" % (cc, lc))
             if done:
                 _logger.info('Reached pruning goal')
-        return epoch, cost
+        return epoch, self.get_cost()
 
     def train_batch(self, algorithm='recursive', algorithm_params=(),
                     finish_threshold=0.005, max_epochs=None):

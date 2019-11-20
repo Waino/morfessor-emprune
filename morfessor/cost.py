@@ -221,3 +221,9 @@ class EmCost(Cost):
         else:
             lc = self._lexicon_coding.get_cost()
             return lc + cc
+
+    def cost_before_tuning(self):
+        lc, cc = super().cost_before_tuning()
+        if self.nolexcost:
+            lc = 0
+        return lc, cc

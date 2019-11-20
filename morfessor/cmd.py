@@ -248,8 +248,11 @@ Interactive use (read corpus from user):
             'Load initial substring lexicon from specified file. '
             'Algorithms specified with -a are ignored.')
     add_arg('--prune-criterion', type=str, default='autotune',
-            choices=['lexicon', 'mdl', 'autotune'],
+            choices=['mdl', 'autotune', 'lexicon'],
             help='Criterion for pruning subwords. '
+            'mdl: (weighted) Minimum Description Length, '
+            'autotune: optimize corpus cost weight to achieve goal lexicon size, '
+            'lexicon: prune to goal lexicon size with pretuned corpus cost weight. '
             '"lexicon" and "autotune" must be combined with --num-morph-types.')
     add_arg('--prune-proportion', type=float, default=0.2, metavar='<float>',
             help='Prune at most this proportion of subwords per epoch. '
@@ -304,7 +307,8 @@ Interactive use (read corpus from user):
             default=False,
             help='Leave out the lexicon cost. '
             'Use this instead of letting --corpusweight go towards infinity. '
-            'Suitable for use with EM+prune, but not standard training.')
+            'Suitable for use with pretuned lexicon goal EM+prune, '
+            'but not EM+prune with MDL or autotune, or standard training.')
     add_arg('--freq-distr-cost', dest="freq_distr", type=str, default='zero',
             metavar='<type>', choices=['zero', 'bl'],
             help="frequency distribution cost for EM+prune")
@@ -560,6 +564,8 @@ def main(args):
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.em_prune is not None:
+            if args.nolexcost and args.prune_criterion != 'lexicon':
+                raise Exception('--no-lexicon-cost requires --prune-criterion lexicon')
             _logger.info("Batch training with em+prune algorithm, criterion: %s",
                 args.prune_criterion)
             c = model.load_data(data)
