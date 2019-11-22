@@ -127,7 +127,7 @@ def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--lex-size', type=int, default=1000000,
         help='Size of seed lexicon')
-    parser.add_argument('--prefix', type=int, default=5,
+    parser.add_argument('--prefix', type=int, default=6,
         help='Length of prefix to use in first pruning pass')
     parser.add_argument('--prune-redundant', type=int, default=0,
         help='Prune redundant prefix and suffix substrings. '

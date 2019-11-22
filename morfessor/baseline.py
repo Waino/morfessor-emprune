@@ -511,20 +511,21 @@ class BaselineModel(object):
             tot_cost += cost
         return expected, tot_cost
 
-    def m_step(self, expected, expected_freq_threshold):
+    def m_step(self, expected, expected_freq_threshold, noexpdigamma=False):
         # prune out infrequent
         # FIXME: is protecting length 1 useful? max(c, 1e-6))?
         expected = collections.Counter(
             dict((w, c) for (w, c) in expected.items()
                  if c > expected_freq_threshold or len(w) == 1))
 
-        # apply exp digamma for Bayesianified/DPified EM
-        # acts as a sparse prior
-        # https://cs.stanford.edu/~pliang/papers/tutorial-acl2007-talk.pdf
-        tot = sum(expected.values())
-        multiplier = tot / math.exp(digamma(tot))
-        for construction in expected.keys():
-            expected[construction] = math.exp(digamma(expected[construction])) * multiplier
+        if not noexpdigamma:
+            # apply exp digamma for Bayesianified/DPified EM
+            # acts as a sparse prior
+            # https://cs.stanford.edu/~pliang/papers/tutorial-acl2007-talk.pdf
+            tot = sum(expected.values())
+            multiplier = tot / math.exp(digamma(tot))
+            for construction in expected.keys():
+                expected[construction] = math.exp(digamma(expected[construction])) * multiplier
 
         # set model parameters
         self.cost.counts = expected
@@ -682,7 +683,7 @@ class BaselineModel(object):
     def train_em_prune(self, prune_criterion,
                        max_epochs=5, sub_epochs=3,
                        expected_freq_threshold=0.5,
-                       maxlen=30, lateen='none'):
+                       maxlen=30, lateen='none', noexpdigamma=False):
         done = False
         for epoch in range(max_epochs):
             for sub_epoch in range(sub_epochs):
@@ -696,7 +697,8 @@ class BaselineModel(object):
                 # M-step
                 self.m_step(
                     expected,
-                    expected_freq_threshold=expected_freq_threshold)
+                    expected_freq_threshold=expected_freq_threshold,
+                    noexpdigamma=noexpdigamma)
             if done:
                 break
             # cost-based pruning of lexicon
