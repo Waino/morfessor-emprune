@@ -149,6 +149,10 @@ class MorfessorEvaluation(object):
             self._create_samples(configuration)
         return self._samples[configuration]
 
+    def set_samples(self, configuration, samples):
+        assert configuration not in self._samples
+        self._samples[configuration] = samples
+
     def _evaluate(self, prediction):
         """Helper method to get the precision and recall of 1 sample"""
         def calc_prop_distance(ref, pred):
@@ -159,8 +163,6 @@ class MorfessorEvaluation(object):
 
         ref_keys = set(self.reference.keys())
         wordlist = sorted(set(prediction.keys()) & ref_keys)
-        if not self.allow_missing_hyps and len(wordlist) != len(ref_keys):
-            raise Exception('{} hypotheses missing'.format(len(ref_keys) - len(wordlist)))
 
         recall_sum = 0.0
         precis_sum = 0.0
@@ -239,6 +241,13 @@ class MorfessorEvaluation(object):
         for i, sample in enumerate(self.get_samples(configuration)):
             _logger.debug("Evaluating sample %s", i)
 
+            if not self.allow_missing_hyps:
+                missing = 0
+                for k in self.reference.keys():
+                    if k not in segmentation:
+                        missing += 1
+                if missing > 0:
+                    raise Exception('{} hypotheses missing'.format(missing))
             prediction = {k: v for k, v in segmentation.items() if k in sample}
             mer.add_data_point(*self._evaluate(prediction))
 
@@ -341,5 +350,35 @@ class WilcoxonSignedRank(object):
 
             for name2 in names:
                 print('{:{width}.5}'.format(results[(name, name2)],
+                                            width=col_width), end='|')
+            print()
+
+    @staticmethod
+    def print_table_compact(results, mers=None):
+        """Nicely format a results table as returned by significance_test"""
+        if mers is None:
+            names = sorted(set(r[0] for r in results.keys()))
+        else:
+            names = [mer.meta_data['name'] for mer in mers]
+        numbers = list(range(1, len(names) + 1))
+
+        first_col_width = max(max(len(n) for n in names), 5)
+        col_width = 9
+
+        print('   {:{width}}'.format('', width=first_col_width), end='|')
+        for h in numbers:
+            print('{:{width}}'.format(h, width=col_width), end='|')
+        print()
+
+        for name, number in zip(names, numbers):
+            print('{:2}'.format(number), end=' ')
+            print('{:{width}}'.format(name, width=first_col_width), end='|')
+
+            for name2 in names:
+                if name == name2:
+                    result = '--'
+                else:
+                    result = results[(name, name2)]
+                print('{:{width}.5}'.format(result,
                                             width=col_width), end='|')
             print()

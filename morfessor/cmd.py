@@ -433,7 +433,7 @@ def main(args):
                      lowercase=args.lowercase)
 
     constr_class = BaseConstructionMethods(force_splits=args.forcesplit, nosplit_re=args.nosplit)
-    
+
     if args.em_prune is not None:
         em_substr = io.read_expected_file(args.em_prune)
     else:
@@ -837,6 +837,9 @@ def get_evaluation_argparser():
     add_arg('--sample-size', dest='samplesize', type=int, metavar='<int>',
             default=1000, help='size of each testing samples. '
                                '-1 uses all testing examples in a single sample.')
+    add_arg('--sample', dest='samples', type=str, metavar='<file>',
+            action='append', default=[],
+            help='preselected testing sample. Specify multple times.')
     add_arg('--allow-missing-hypotheses', default=False, action='store_true',
             help='If some segmentations are found in the reference '
                  'but are missing from the hypothesis, '
@@ -858,6 +861,8 @@ def get_evaluation_argparser():
             help='Uses a template string for the format-string options. '
                  'Available templates are: default, table and latex. '
                  'If format-string is defined this option is ignored')
+    add_arg('--compact', default=False, action='store_true',
+            help='Use a compact table for a large number of comparisons')
 
     add_arg = parser.add_argument_group('file options').add_argument
     add_arg('--construction-separator', dest="cseparator", type=_str,
@@ -906,18 +911,34 @@ def main_evaluation(args):
 
     io = MorfessorIO(encoding=args.encoding)
 
+    samples = []
+    if len(args.samples) > 0:
+        for samplefile in args.samples:
+             words = [word for (count, word) in io.read_corpus_file(samplefile)]
+             samples.append(words)
+        configuration = 'presampled'
+        num_samples = len(samples)
+    else:
+        if args.samplesize > 0:
+            sample_size = args.samplesize
+            num_samples = args.numsamples
+        else:
+            sample_size = len(ev.reference)
+            num_samples = 1
+        configuration = EvaluationConfig(num_samples=num_samples,
+                                         sample_size=sample_size)
+
     ev = MorfessorEvaluation(
         io.read_annotations_file(args.goldstandard[0]),
-        allow_missing_hyps=args.allow_missing_hypotheses)
+        allow_missing_hyps=args.allow_missing_hypotheses,
+        )
+
+    if configuration == 'presampled':
+        ev.set_samples(configuration, samples)
 
     results = []
 
-    if args.samplesize > 0:
-        sample_size = args.samplesize
-        num_samples = args.numsamples
-    else:
-        sample_size = len(ev.reference)
-        num_samples = 1
+
 
     f_string = args.formatstring
     if f_string is None:
@@ -925,8 +946,7 @@ def main_evaluation(args):
 
     for f in args.models:
         result = ev.evaluate_model(io.read_any_model(f),
-                                   configuration=EvaluationConfig(num_samples,
-                                                                  sample_size),
+                                   configuration=configuration,
                                    meta_data={'name': os.path.basename(f)})
         results.append(result)
         print(result.format(f_string))
@@ -935,9 +955,7 @@ def main_evaluation(args):
     for f in args.test_segmentations:
         segmentation = io.read_segmentation_file(f, False)
         result = ev.evaluate_segmentation(segmentation,
-                                          configuration=
-                                          EvaluationConfig(num_samples,
-                                                           sample_size),
+                                          configuration=configuration,
                                           meta_data={'name':
                                                      os.path.basename(f)})
         results.append(result)
@@ -946,4 +964,7 @@ def main_evaluation(args):
     if len(results) > 1 and num_samples > 1:
         wsr = WilcoxonSignedRank()
         r = wsr.significance_test(results)
-        WilcoxonSignedRank.print_table(r)
+        if args.compact:
+            WilcoxonSignedRank.print_table_compact(r, mers=results)
+        else:
+            WilcoxonSignedRank.print_table(r)
