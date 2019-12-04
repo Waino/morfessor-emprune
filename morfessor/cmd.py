@@ -911,6 +911,7 @@ def main_evaluation(args):
 
     io = MorfessorIO(encoding=args.encoding)
 
+    reference = io.read_annotations_file(args.goldstandard[0])
     samples = []
     if len(args.samples) > 0:
         for samplefile in args.samples:
@@ -923,13 +924,13 @@ def main_evaluation(args):
             sample_size = args.samplesize
             num_samples = args.numsamples
         else:
-            sample_size = len(ev.reference)
+            sample_size = len(reference)
             num_samples = 1
         configuration = EvaluationConfig(num_samples=num_samples,
                                          sample_size=sample_size)
 
     ev = MorfessorEvaluation(
-        io.read_annotations_file(args.goldstandard[0]),
+        reference,
         allow_missing_hyps=args.allow_missing_hypotheses,
         )
 
