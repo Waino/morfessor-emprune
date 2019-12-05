@@ -263,22 +263,42 @@ class WilcoxonSignedRank(object):
 
     """
 
+    def __init__(self, method='pratt', correction=True):
+        try:
+            import scipy.stats
+            self._wilcoxon = self._wilcoxon_scipy
+        except ImportError:
+            _logger.warn('Cannot load scipy, using pure python wilcoxon')
+            self._wilcoxon = self._wilcoxon_python
+        self.method = method
+        self.correction = correction
+
     @staticmethod
-    def _wilcoxon(d, method='pratt', correction=True):
+    def _wilcoxon_python(x, y, method='pratt', correction=True):
         if method not in ('wilcox', 'pratt'):
             raise ValueError
+        d = [a - b for (a, b) in zip(x, y)]
         if method == 'wilcox':
             d = list(filter(lambda a: a != 0, d))
+        if sum(a != 0 for a in d) == 0:
+            raise ValueError('zero_method "wilcox" and "pratt" '
+                'do not work if the x - y is zero for all elements.')
 
         count = len(d)
 
         ranks = WilcoxonSignedRank._rankdata([abs(v) for v in d])
+        print('ranks', ranks)
+        print('sorted', sorted(zip(ranks, d)))
         rank_sum_pos = sum(r for r, v in zip(ranks, d) if v > 0)
         rank_sum_neg = sum(r for r, v in zip(ranks, d) if v < 0)
+        print('rank_sum_pos', rank_sum_pos)
+        print('rank_sum_neg', rank_sum_neg)
 
         test = min(rank_sum_neg, rank_sum_pos)
+        print('test', test)
 
         mean = count * (count + 1) * 0.25
+        print('mean', mean)
         stdev = (count*(count + 1) * (2 * count + 1))
         # compensate for duplicate ranks
         no_zero_ranks = [r for i, r in enumerate(ranks) if d[i] != 0]
@@ -289,11 +309,21 @@ class WilcoxonSignedRank(object):
 
         if correction:
             correction = +0.5 if test > mean else -0.5
+            print('correction', correction)
         else:
             correction = 0
         z = (test - mean - correction) / stdev
+        print('z', z)
 
-        return 2 * WilcoxonSignedRank._norm_cum_pdf(abs(z))
+        tmp = 2 * WilcoxonSignedRank._norm_cum_pdf(abs(z))
+        print('tmp', tmp)
+        return tmp
+
+    @staticmethod
+    def _wilcoxon_scipy(x, y, method='pratt', correction=True):
+        import scipy.stats
+        result = scipy.stats.wilcoxon(x, y, correction=correction, zero_method=method)
+        return result.pvalue
 
     @staticmethod
     def _rankdata(d):
@@ -328,9 +358,9 @@ class WilcoxonSignedRank(object):
             return {}
         p = {}
         for r1, r2 in product(results.keys(), results.keys()):
-            p[(r1, r2)] = self._wilcoxon([v1-v2
-                                          for v1, v2 in zip(results[r1],
-                                                            results[r2])])
+            p[(r1, r2)] = self._wilcoxon(
+                results[r1], results[r2],
+                method=self.method, correction=self.correction)
 
         return p
 
@@ -363,7 +393,7 @@ class WilcoxonSignedRank(object):
         numbers = list(range(1, len(names) + 1))
 
         first_col_width = max(max(len(n) for n in names), 5)
-        col_width = 9
+        col_width = 10
 
         print('   {:{width}}'.format('', width=first_col_width), end='|')
         for h in numbers:

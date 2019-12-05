@@ -844,6 +844,9 @@ def get_evaluation_argparser():
             help='If some segmentations are found in the reference '
                  'but are missing from the hypothesis, '
                  'simply ignore them.')
+    add_arg('--zero-method', default='pratt',
+            choices=('wilcox', 'pratt', 'zsplit'),
+            help='Method of handling zero differences in the Wilcoxon test')
 
     add_arg = parser.add_argument_group('formatting options').add_argument
     add_arg('--format-string', dest='formatstring', metavar='<format>',
@@ -963,7 +966,7 @@ def main_evaluation(args):
         print(result.format(f_string))
 
     if len(results) > 1 and num_samples > 1:
-        wsr = WilcoxonSignedRank()
+        wsr = WilcoxonSignedRank(args.zero_method)
         r = wsr.significance_test(results)
         if args.compact:
             WilcoxonSignedRank.print_table_compact(r, mers=results)
