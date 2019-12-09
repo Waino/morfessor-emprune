@@ -120,12 +120,12 @@ class EmLexiconEncoding(LexiconEncoding):
 
 
 class EmCorpusEncoding(CorpusEncoding):
-    def __init__(self, *args, freq_distr='zero', **kwargs):
+    def __init__(self, *args, freq_distr='baseline', **kwargs):
         super().__init__(*args, **kwargs)
         try:
             freq_dist_funcs = {
-                'zero': self.frequency_distribution_cost_zero,
-                'bl': self.frequency_distribution_cost_bl,
+                'omit': self.frequency_distribution_cost_zero,
+                'baseline': self.frequency_distribution_cost_bl,
             }
             self.frequency_distribution_cost = freq_dist_funcs[freq_distr]
         except KeyError:
@@ -164,7 +164,7 @@ class EmCorpusEncoding(CorpusEncoding):
 
 class EmCost(Cost):
     def __init__(self, contr_class, corpusweight=1.0, nolexcost=False,
-                 freq_distr='zero'):
+                 freq_distr='baseline'):
         self.cc = contr_class
         # Cost variables
         self._lexicon_coding = EmLexiconEncoding()

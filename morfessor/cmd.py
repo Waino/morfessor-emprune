@@ -130,11 +130,16 @@ Interactive use (read corpus from user):
     add_arg('--nbest', dest="nbest", default=1, type=int, metavar='<int>',
             help="output n-best viterbi results")
     add_arg('--sample', dest="sample", default=False, action='store_true',
-            help='Use sampling instead of viterbi segmentation.')
+            help='Use sampling instead of viterbi segmentation. '
+            'Forward-filtering backward-sampling samples from the full distribution')
     add_arg('--sample-nbest', dest="sample_nbest", default=None, type=int, metavar='<int>',
-            help='Use sampling from the n-best viterbi segmentation.')
-    add_arg('--sampling-temperature', dest="sampling_theta", default=0.5, type=float, metavar='<float>',
-            help='(Inverted) temperature parameter for sampling.')
+            help='Use sampling from the n-best viterbi segmentation. '
+            'Approximates --sample, but is much faster')
+    add_arg('--sampling-temperature', dest="sampling_theta", default=0.5,
+            type=float, metavar='<float>',
+            help='(Inverted) temperature parameter for sampling. '
+                 '(1.0 = Viterbi, '
+                 'default "%(default)s")')
 
     # Options for data formats
     add_arg = parser.add_argument_group(
@@ -252,10 +257,13 @@ Interactive use (read corpus from user):
             help='Criterion for pruning subwords. '
             'mdl: (weighted) Minimum Description Length, '
             'autotune: optimize corpus cost weight to achieve goal lexicon size, '
-            'lexicon: prune to goal lexicon size with pretuned corpus cost weight. '
-            '"lexicon" and "autotune" must be combined with --num-morph-types.')
+            'lexicon: prune to goal lexicon size with omitted prior '
+            'or pretuned corpus cost weight. '
+            '"lexicon" and "autotune" must be combined with --num-morph-types. '
+            '(default "%(default)s")')
     add_arg('--prune-proportion', type=float, default=0.2, metavar='<float>',
-            help='Prune at most this proportion of subwords per epoch. '
+            help='Epoch pruning quota: '
+            'Prune at most this proportion of subwords per epoch. '
             '(default "%(default)s")')
     add_arg('--em-subepochs', type=int, default=3, metavar='<int>',
             help='Subepochs of EM to perform before pruning. '
@@ -266,7 +274,11 @@ Interactive use (read corpus from user):
             help='Also prune subwords with expected count less than this. '
             '(default "%(default)s"). ')
     add_arg('--lateen', dest='lateen', choices=['none', 'full', 'prune'],
-            help='Lateen EM mode.')
+            default='none',
+            help='Lateen EM training mode. '
+                 'none: "soft" EM (default), '
+                 'full: Lateen-EM, '
+                 'prune: EM+Viterbi-prune')
     add_arg('--no-bayesianify', dest='noexpdigamma', action='store_true',
             default=False,
             help='Leave out the Bayesian EM exp digamma '
@@ -309,13 +321,16 @@ Interactive use (read corpus from user):
                  "sets the initial value if other tuning options are used")
     add_arg('--no-lexicon-cost', dest='nolexcost', action='store_true',
             default=False,
-            help='Leave out the lexicon cost. '
+            help='Omit the lexicon cost (prior). '  # noprior
             'Use this instead of letting --corpusweight go towards infinity. '
             'Suitable for use with pretuned lexicon goal EM+prune, '
             'but not EM+prune with MDL or autotune, or standard training.')
-    add_arg('--freq-distr-cost', dest="freq_distr", type=str, default='zero',
-            metavar='<type>', choices=['zero', 'bl'],
-            help="frequency distribution cost for EM+prune")
+    add_arg('--freq-distr-cost', dest="freq_distr", type=str,
+            default='baseline',
+            metavar='<type>', choices=['omit', 'baseline'],
+            help="frequency distribution cost for EM+prune (part of the prior). "
+                 "baseline: approximate Morfessor Baseline prior (default)"
+                 "omit: set frequency distribution cost to zero.")
     add_arg('--weight-threshold', dest='threshold', default=0.01,
             metavar='<float>', type=float,
             help='percentual stopping threshold for corpusweight updaters')
@@ -568,6 +583,12 @@ def main(args):
     elif len(args.trainfiles) > 0:
         ts = time.time()
         if args.em_prune is not None:
+            if args.forcesplit not in ([], ['-']):
+                raise Exception('with --em-prune, '
+                    '--forcesplit must be applied during '
+                    'seed lexicon construction (freq_substr.py)')
+            if args.nosplit:
+                raise Exception('--em-prune does not support --nosplit-re')
             if args.nolexcost and args.prune_criterion != 'lexicon':
                 raise Exception('--no-lexicon-cost requires --prune-criterion lexicon')
             _logger.info("Batch training with em+prune algorithm, criterion: %s",

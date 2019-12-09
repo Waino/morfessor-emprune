@@ -124,7 +124,44 @@ class FrequentSubstrings(object):
 
 def get_parser():
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="""
+Morfessor EM+Prune %s
+
+Copyright (c) 2019, Stig-Arne Grönroos, Sami Virpioja, and Peter Smit.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+1.  Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+2.  Redistributions in binary form must reproduce the above
+    copyright notice, this list of conditions and the following
+    disclaimer in the documentation and/or other materials provided
+    with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+Command-line arguments:
+        """,
+        epilog="""
+Simple usage:
+    freq_substr.py < input > output
+        """)
     parser.add_argument('--lex-size', type=int, default=1000000,
         help='Size of seed lexicon')
     parser.add_argument('--prefix', type=int, default=6,
@@ -143,14 +180,37 @@ def get_parser():
     parser.add_argument('--forcesplit-both', type=str, default='',
         help='Characters to force splitting both before and after. '
              'Substrings longer than 1 with these chars will be pruned out.')
+    parser.add_argument('--traindata-list', dest="list", default=False,
+            action='store_true',
+            help="input file is a word-count list "
+                 "(one compound per line, preceded by count of compound)."
+                 "Recommended.")
+
     return parser
+
+
+def read_word_counts(lines):
+    lines = [line.strip().split(None, 1) for line in lines]
+    counts = [(int(count), word) for (count, word) in lines]
+    return counts
+
+
+def read_corpus(lines):
+    counts = collections.Counter()
+    for line in lines:
+        counts.update(line.split())
+    counts = [(count, word) for (word, count) in counts.most_common()]
+    return counts
+
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
     lines = sys.stdin
-    lines = [line.strip().split(None, 1) for line in lines]
-    lines = [(int(count), word) for (count, word) in lines]
+    if args.list:
+        lines = read_word_counts(lines)
+    else:
+        lines = read_corpus(lines)
     forcesplit_before = args.forcesplit_before + args.forcesplit_both
     forcesplit_after = args.forcesplit_after + args.forcesplit_both
     freq_substrs = FrequentSubstrings(
