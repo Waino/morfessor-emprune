@@ -2,6 +2,7 @@
 import collections
 import itertools
 import sys
+from morfessor.utils import SortedCounter
 
 def substrs(seq, min_len=1, max_len=None, prefixes=None):
     prefix_len = min_len - 1
@@ -32,7 +33,7 @@ class FrequentSubstrings(object):
 
         self.do_forcesplit = (len(self.forcesplit_before) + len(self.forcesplit_after)) > 0
         self.chars = collections.Counter()
-        self.prefixes = collections.Counter()
+        self.prefixes = SortedCounter()
         self.long = collections.Counter()
 
     def first_pass(self, seqs):
@@ -110,7 +111,7 @@ class FrequentSubstrings(object):
             self.prune_redundant(combined)
         # prune out infrequent substrings
         if len(combined) > prune_to:
-            combined = collections.Counter(
+            combined = SortedCounter(
                 dict(combined.most_common(prune_to)))
         else:
             print('Nothing pruned in finalize. Your total lexicon is small.', file=sys.stderr)
@@ -120,7 +121,7 @@ class FrequentSubstrings(object):
         del self.chars
         del self.prefixes
         del self.long
-        return combined
+        return SortedCounter(combined)
 
 def get_parser():
     import argparse

@@ -36,60 +36,110 @@ The report is available online at
 http://urn.fi/URN:ISBN:978-952-60-5501-5
 
 
-Restricted Morfessor
---------------------
+Morfessor EM+Prune
+------------------
 
 This branch includes the modifications to Morfessor that enable
-restricting segmentation points using a linguistic gold standard.
-Morfessor may then join some of the linguistic morphs, but can not
-split linguistic morphs into smaller parts.
+training using Expectation Maximization and Pruning.
 
-The modifications have an impact on memory consumption. For this
-reason, we have not included them in the main branch at this time.
+Morfessor EM+Prune training achieves better Morfessor cost than the
+earlier local search algorithm.
 
-To use the Restricted Morfessor, give the linguistic restrictions
-using ``--restricted-segmentation <file>``. The restrictions should be
-in the same format as Morfessor annotated data files:
+A simple usage example ::
 
-Example: ::
+    # Create 1M substring seed lexicon direct from corpus
+    freq_substr.py --lex-size 1000000 < corpus > freq_substr.1M
+    
+    # Perform Morfessor EM+Prune training. Autotuning with 10k lexicon size.
+    morfessor \
+        --em-prune freq_substr.1M \
+        -t corpus \
+        --num-morph-types 10000 \
+        --save-segmentation emprune.model
+    
+    # Segment data using the Viterbi algorithm
+    morfessor-segment \
+        testdata \
+        --em-prune emprune.model \
+        --output segmented.testdata
 
-    kahvikakku kahvi kak ku
+Additional options for freq_substr.py ::
+
+    --traindata-list
+        Training data is a list of word types preceded by counts, not a corpus.
+
+    --prune-redundant "-1"
+        Setting prune-redundant to -1 disables pre-pruning of redundant substrings.
+        Note the quotes, to prevent the dash from being interpreted as a flag.
+
+    --forcesplit-before XYZ
+        Force a splitting point before the characters X, Y and Z
+    --forcesplit-after XYZ
+        Force a splitting point after the characters X, Y and Z
+    --forcesplit-both XYZ
+        Force a splitting point both before and after the characters X, Y and Z
+        Note that hyphens are NOT force split by default anymore,
+        to get the same forcesplitting as Baseline,
+        you need to specify --forcesplit-both "-"
+
+Additional options for EM+Prune training ::
+
+    --traindata-list
+        Training data is a list of word types preceded by counts, not a corpus.
+
+    --prune-criterion {mdl,autotune,lexicon}
+        mdl: (alpha-weighted) Minimum Description Length pruning.
+        autotune: MDL with automatic tuning of alpha for lexicon size.
+                  If you want a fixed lexicon size, use this.
+                  Use --num-morph-types to specify size of lexicon.
+        lexicon: lexicon size with omitted prior or pretuned alpha.
+                 You probably want "autotune" instead.
+
+    --num-morph-types N
+        Goal lexicon size.
+
+    --prune-proportion 0.2
+        How large proportion of lexicon to prune in each epoch.
+
+    --em-subepochs 3
+        How many sub-epochs of EM to perform.
+
+    --expected-freq-threshold 0.5
+        Also prune subwords with expected count less than this.
+
+    --lateen {none,full,prune}
+       Lateen EM training mode.
+       none: "soft" EM (default)
+       full: Lateen-EM
+       prune: EM+Viterbi-prune
+
+    --no-bayesianify
+        Leave out the Bayesian EM exp digamma transformation of expected counts.
+
+    --no-lexicon-cost
+        Omit prior entirely.
+
+    --freq-distr-cost {baseline,omit}
+        Frequency distribution prior to use.
+        baseline: Approximate Morfessor Baseline prior (default).
+        omit: set frequency distribution cost to zero.
+
+    --save-pseudomodel
+        use the trained EM+Prune model to segment the training data,
+        and save the resulting segmentation as if it was a Morfessor Baseline model.
 
 
-It is recommended to first train using the recursive training algorithm,
-but switch over to Viterbi training after a few iterations.
-This can be done using the command line argument sequence
-``--algorithm recursive --algorithm flatten --algorithm viterbi``
+Additional options for segmentation ::
 
-An example command using omorfi-derived segmentation: ::
+    --sample-nbest
+        Sample alternative segmentations from n-best list.
+        Approximates --sample, but is much faster.
 
-    morfessor -e utf-8 --traindata-list -d none \
-        --restricted-segmentation "restrictions.omorfi.fi" \
-        --algorithm recursive --algorithm flatten --algorithm viterbi \
-        -t wordcounts.fi -w 1.0 \
-        -S model.alpha1.0.seg
+    --sample
+        Sample from full distribution. You probably want --sample-nbest instead.
 
-
-Aligned token count tuning
---------------------------
-
-In the paper [1], the corpus weight for Morfessor was tuned to balance
-the number of tokens between the source and segmented target language.
-
-Train a grid of models with different corpus weight parameters.
-Then evaluate the models with the command: ::
-
-    tune_tokensync.py -e utf-8 \
-        --aligned-reference parallel.en \
-        --aligned-to-segment parallel.fi \
-        model.alpha*.seg
-
-[1]: Stig-Arne Grönroos, Sami Virpioja and Mikko Kurimo.  Hybrid
-Morphological Segmentation for Phrase-Based Machine Translation.
-Proceedings of the First Conference on Machine Translation, pages
-289–295, Berlin, Germany, August 2016. Association for Computational
-Linguistics. Available on-line:
-http://www.statmt.org/wmt16/pdf/W16-2312.pdf
+    --sampling-temperature 0.5
+        (Inverted) temperature parameter for sampling. (1.0 = Viterbi)
 
 Contact
 -------

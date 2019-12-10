@@ -6,6 +6,7 @@ from collections import Counter
 import math
 
 from .corpus import CorpusEncoding, LexiconEncoding, AnnotatedCorpusEncoding, FixedCorpusWeight
+from .utils import SortedCounter
 
 _logger = logging.getLogger(__name__)
 
@@ -178,7 +179,7 @@ class EmCost(Cost):
         self.set_corpus_weight_updater(corpusweight)
         self.nolexcost = nolexcost
 
-        self.counts = Counter()
+        self.counts = SortedCounter()
         self._cached_tokens = None
 
     def load_lexicon(self, substr_lexicon):
@@ -206,8 +207,9 @@ class EmCost(Cost):
         return self.tokens() + self._corpus_coding.boundaries
 
     def get_expected(self):
-        for substr, count in self.counts.most_common():
-            yield count, substr
+        self.counts = SortedCounter(self.counts)
+        for (substr, count) in self.counts.most_common():
+            yield (count, substr)
 
     def reset(self):
         self._cached_tokens = None

@@ -2,6 +2,7 @@
 shared between different modules and variants of the software.
 """
 
+import collections
 import logging
 import math
 import random
@@ -245,3 +246,33 @@ def tail(n, iterable):
     "Return an iterator over the last n items"
     # tail(3, 'ABCDEFG') --> E F G
     return iter(collections.deque(iterable, maxlen=n))
+
+
+class SortedCounter(collections.Counter):
+    """A Counter, with most_common replaced with a version
+    that sorts results by count and key, rather than just count.
+    The added elements must be sortable."""
+    def most_common(self, n=None, keep_ties=False):
+        """List the n most common elements and their counts from the most
+        common to the least.  If n is None, then list all element counts.
+        Ties are sorted by element.
+        If keep_ties is set to True, more than n results may be returned,
+        if elements are tied for last place."""
+
+        all_most_common = super().most_common()
+        if n is None:
+            return sorted(all_most_common,
+                          key=lambda x: (-x[1], x[0]))
+        i = n - 1
+        try:
+            i_count = all_most_common[i][1]
+            while all_most_common[i][1] == i_count:
+                i += 1
+            all_most_common = all_most_common[:i]
+        except IndexError:
+            pass
+        all_most_common = sorted(all_most_common,
+                                 key=lambda x: (-x[1], x[0]))
+        if keep_ties:
+            return all_most_common
+        return all_most_common[:n]

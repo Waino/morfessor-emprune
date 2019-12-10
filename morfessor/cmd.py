@@ -329,7 +329,7 @@ Interactive use (read corpus from user):
             default='baseline',
             metavar='<type>', choices=['omit', 'baseline'],
             help="frequency distribution cost for EM+prune (part of the prior). "
-                 "baseline: approximate Morfessor Baseline prior (default)"
+                 "baseline: approximate Morfessor Baseline prior (default). "
                  "omit: set frequency distribution cost to zero.")
     add_arg('--weight-threshold', dest='threshold', default=0.01,
             metavar='<float>', type=float,
