@@ -170,9 +170,9 @@ class BaselineModel(object):
 
         # if self._use_skips:
         #     self._counter = collections.Counter()
-        # if self._supervised:
-        #     self._update_annotation_choices()
-        #     self._annot_coding.update_weight()
+        if self._supervised:
+            self._update_annotation_choices()
+            self._annot_coding.update_weight()
 
         return forced_epochs
 
@@ -198,10 +198,10 @@ class BaselineModel(object):
                 constructions[m] += self._analyses[compound].rcount
 
         # Apply the selected constructions in annotated corpus coding
-        self._annot_coding.set_constructions(constructions)
+        self.cost.set_annot_constructions(constructions)
         for constr in constructions.keys():
             count = self.get_construction_count(constr)
-            self._annot_coding.set_count(constr, count)
+            self.cost.set_annot_observed(constr, count)
 
     def _best_analysis(self, choices):
         """Select the best analysis out of the given choices."""
@@ -419,11 +419,6 @@ class BaselineModel(object):
     def get_cost(self):
         """Return current model encoding cost."""
         return self.cost.cost()
-        cost = self.cost.cost()
-        if self._supervised:
-            return cost + self._annot_coding.get_cost()
-        else:
-            return cost
 
     def get_segmentations(self):
         """Retrieve segmentations for all compounds encoded by the model."""
@@ -470,6 +465,12 @@ class BaselineModel(object):
             self._clear_compound_analysis(compound)
             self._set_compound_analysis(compound, self.cc.splitn(compound, splitlocs))
         return self.get_cost()
+
+    def set_annotations(self, annotations, annotationweight):
+        self._supervised = True
+        self.cost.set_annot_coding_weight(annotationweight)
+        self.annotations = annotations
+        self._update_annotation_choices()
 
     def segment(self, compound):
         """Segment the compound by looking it up in the model analyses.

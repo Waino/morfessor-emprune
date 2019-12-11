@@ -173,6 +173,7 @@ class AnnotatedCorpusEncoding(Encoding):
 
         """
         self.constructions = constructions
+        self.boundaries = len(constructions)
         self.tokens = sum(constructions.values())
         self.logtokensum = 0.0
 
@@ -209,8 +210,7 @@ class AnnotatedCorpusEncoding(Encoding):
         if not self.do_update_weight:
             return
         old = self.weight
-        self.weight = (self.corpus_coding.weight *
-                       float(self.corpus_coding.boundaries) / self.boundaries)
+        self.weight = (float(self.corpus_coding.boundaries) / self.boundaries)
         if self.weight != old:
             _logger.info("Corpus weight of annotated data set to %s"
                          % self.weight)
@@ -220,10 +220,12 @@ class AnnotatedCorpusEncoding(Encoding):
         if self.boundaries == 0:
             return 0.0
         n = self.tokens + self.boundaries
+        # parametrization changed: both alpha and beta are applied
+        weight = self.corpus_coding.weight * self.weight
         return ((n * math.log(self.corpus_coding.tokens +
                               self.corpus_coding.boundaries)
                  - self.boundaries * math.log(self.corpus_coding.boundaries)
-                 - self.logtokensum) * self.weight)
+                 - self.logtokensum) * weight)
 
 
 class LexiconEncoding(Encoding):

@@ -42,9 +42,22 @@ class Cost(object):
     def set_corpus_coding_weight(self, weight):
         self._corpus_coding.weight = weight
 
+    def set_annot_coding_weight(self, weight):
+        if self._annot_coding is None:
+            self._annot_coding = AnnotatedCorpusEncoding(
+                self._corpus_coding, weight)
+
+    def set_annot_constructions(self, constructions):
+        self._annot_coding.set_constructions(constructions)
+
+    def set_annot_observed(self, construction, count):
+        self._annot_coding.set_count(construction, count)
+
     def cost(self):
         lc = self._lexicon_coding.get_cost()
         cc = self._corpus_coding.get_cost()
+        if self._annot_coding is not None:
+            cc += self._annot_coding.get_cost()
         return lc + cc
 
     def cost_before_tuning(self):
@@ -53,6 +66,9 @@ class Cost(object):
         self._corpus_coding.weight = 1.
         lc = self._lexicon_coding.get_cost()
         cc = self._corpus_coding.get_cost()
+        if self._annot_coding is not None:
+            ac = self._annot_coding.get_cost()
+            cc += ac
         # restore corpus weight
         self._corpus_coding.weight = current_weight
         return (lc, cc)
