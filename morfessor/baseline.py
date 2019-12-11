@@ -96,7 +96,11 @@ class BaselineModel(object):
         self._analyses = {}
 
         # Flag to indicate the mode in which the model is operating
+        # NORMAL: old Baseline, EM: EM+Prune, SEGMENT_ONLY: reduced
         self._mode = MODE_EM if use_em else MODE_NORMAL
+
+        # Flag to indicate whether semi-supervised training is used
+        self._supervised = False
 
         # Cost variables
         # self._lexicon_coding = LexiconEncoding()
