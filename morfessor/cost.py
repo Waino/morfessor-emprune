@@ -84,6 +84,8 @@ class Cost(object):
         self.counts[construction] += delta
 
         self._corpus_coding.update_count(self.cc.corpus_key(construction), old_count, self.counts[construction])
+        if self._annot_coding is not None:
+            self._annot_coding.update_count(self.cc.corpus_key(construction), old_count, self.counts[construction])
 
         if self.counts[construction] == 0:
             self._lexicon_coding.remove(self.cc.lex_key(construction))

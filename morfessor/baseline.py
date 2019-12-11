@@ -52,7 +52,8 @@ PRUNE_GAIN = 1
 PRUNE_LOSS = 2
 PRUNE_NEVER_DBL = 3
 PRUNE_NEVER_NO_ALT = 4
-PRUNE_NEVER_CHAR = 5
+PRUNE_NEVER_SUPERVISED = 5
+PRUNE_NEVER_CHAR = 6
 
 PruneStats = collections.namedtuple('PruneStats',
     ['construction', 'threshold_alpha', 'delta_lc', 'delta_cc', 'delta_cost', 'decision'])
@@ -172,7 +173,7 @@ class BaselineModel(object):
         #     self._counter = collections.Counter()
         if self._supervised:
             self._update_annotation_choices()
-            self._annot_coding.update_weight()
+            self.cost._annot_coding.update_weight()
 
         return forced_epochs
 
@@ -584,6 +585,10 @@ class BaselineModel(object):
             delta_cc = cc - orig_cc
             threshold_alpha, delta_cost, decision = self.prune_cost_at_alpha(
                 current_alpha, delta_lc, delta_cc)
+            if self._supervised:
+                # this only protects currently active annotations
+                if self.cost._annot_coding.constructions.get(construction, 0) > 0:
+                    decision = PRUNE_NEVER_SUPERVISED
             yield PruneStats(construction,
                              threshold_alpha,
                              delta_lc, delta_cc,
@@ -695,6 +700,10 @@ class BaselineModel(object):
                 else:
                     expected, cost = self.e_step(maxlen=maxlen)
                 _logger.info("E-step cost: %s tokens: %s" % (cost, self.cost.all_tokens()))
+                if self._supervised:
+                    self._update_annotation_choices()
+                    for constr, count in self.cost._annot_coding.constructions.items():
+                        expected[constr] += self.cost._annot_coding.weight * count
                 # M-step
                 self.m_step(
                     expected,
@@ -1297,8 +1306,8 @@ class BaselineModel(object):
     def get_params(self):
         """Returns a dict of hyperparameters."""
         params = {'corpusweight': self.get_corpus_coding_weight()}
-        #if self._supervised:
-        #    params['annotationweight'] = self._annot_coding.weight
+        if self._supervised:
+            params['annotationweight'] = self.cost._annot_coding.weight
         params['forcesplit'] = ''.join(sorted(self.cc._force_splits))
         if self.cc._nosplit:
             params['nosplit'] = self.cc._nosplit.pattern
