@@ -47,7 +47,7 @@ earlier local search algorithm.
 
 A simple usage example ::
 
-    # Create 1M substring seed lexicon direct from corpus
+    # Create 1M substring seed lexicon direct from a pretokenized corpus
     freq_substr.py --lex-size 1000000 < corpus > freq_substr.1M
     
     # Perform Morfessor EM+Prune training. Autotuning with 10k lexicon size.
@@ -139,7 +139,7 @@ Additional options for segmentation ::
         Sample from full distribution. You probably want --sample-nbest instead.
 
     --sampling-temperature 0.5
-        (Inverted) temperature parameter for sampling. (1.0 = Viterbi)
+        (Inverted) temperature parameter for sampling. (1.0 = unsmoothed)
 
 Contact
 -------

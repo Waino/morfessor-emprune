@@ -71,7 +71,7 @@ class BaselineModel(object):
     penalty = -9999.9
 
     def __init__(self, corpusweight=None, use_skips=False, constr_class=None,
-                 use_em=False, em_substr=None, nolexcost=False, freq_distr='zero'):
+                 use_em=False, em_substr=None, nolexcost=False, freq_distr='baseline'):
         """Initialize a new model instance.
 
         Arguments:
@@ -970,14 +970,15 @@ class BaselineModel(object):
                     math.log(self.cost.compound_tokens()))
         return constructions, cost
 
-    def sample_segment(self, compound, theta=0.5, maxlen=30):
+    def sample_segment(self, compound, theta=0.5, maxlen=30, taboo=None):
         """Sample a segmentation using the
         Forward-filter Backward-sample algorithm.
 
         Arguments:
           compound: compound to be segmented
-          theta: sampling temperature. (1.0 = Viterbi).
+          theta: sampling temperature. (1.0 = unsmoothed).
           maxlen: maximum length for the constructions
+          taboo: not allowed to use these constructions
 
         Returns the sampled segmentation and its log-probability.
 
@@ -985,6 +986,7 @@ class BaselineModel(object):
         grid = {'start': (0.0, None)}
         tokens = self.cost.all_tokens()
         logtokens = math.log(tokens) if tokens > 0 else 0
+        taboo = set() if taboo is None else set(taboo)
 
         badlikelihood = self.cost.bad_likelihood(compound, 0)
         extrabad = badlikelihood**2
@@ -1003,6 +1005,8 @@ class BaselineModel(object):
                     continue
                 cost = grid[pt][0]
                 construction = self.cc.slice(compound, pt, t)
+                if construction in taboo:
+                    continue
                 count = self.get_construction_count(construction)
                 if count > 0:
                     cost += (logtokens - theta * math.log(count))
@@ -1033,6 +1037,8 @@ class BaselineModel(object):
                 # cc.slice requires None for endpoints
                 pt = None if pt == 'start' else pt
                 construction = self.cc.slice(compound, pt, t)
+                if construction in taboo:
+                    continue
                 count = self.get_construction_count(construction)
                 if count > 0:
                     cost += theta * (logtokens - math.log(count) - totcost)

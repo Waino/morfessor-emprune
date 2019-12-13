@@ -138,7 +138,7 @@ Interactive use (read corpus from user):
     add_arg('--sampling-temperature', dest="sampling_theta", default=0.5,
             type=float, metavar='<float>',
             help='(Inverted) temperature parameter for sampling. '
-                 '(1.0 = Viterbi, '
+                 '(1.0 = unsmoothed, '
                  'default "%(default)s")')
 
     # Options for data formats
