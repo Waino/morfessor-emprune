@@ -251,7 +251,7 @@ def tail(n, iterable):
 class SortedCounter(collections.Counter):
     """A Counter, with most_common replaced with a version
     that sorts results by count and key, rather than just count.
-    The added elements must be sortable."""
+    The keys (counted elements) must be sortable."""
     def most_common(self, n=None, keep_ties=False):
         """List the n most common elements and their counts from the most
         common to the least.  If n is None, then list all element counts.

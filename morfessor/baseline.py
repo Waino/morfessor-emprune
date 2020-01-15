@@ -476,6 +476,7 @@ class BaselineModel(object):
         self.cost.set_annot_coding_weight(annotationweight)
         self.annotations = annotations
         self._update_annotation_choices()
+        self.cost._annot_coding.update_weight()
 
     def segment(self, compound):
         """Segment the compound by looking it up in the model analyses.
@@ -706,6 +707,7 @@ class BaselineModel(object):
                 _logger.info("E-step cost: %s tokens: %s" % (cost, self.cost.all_tokens()))
                 if self._supervised:
                     self._update_annotation_choices()
+                    self.cost._annot_coding.update_weight()
                     for constr, count in self.cost._annot_coding.constructions.items():
                         expected[constr] += self.cost._annot_coding.weight * count
                 # M-step
