@@ -661,6 +661,9 @@ class BaselineModel(object):
         # determine optimal alpha. prune at most proportion. prune based on decision
         def prune_criterion(prune_stats):
             # determine optimal alpha
+            if len(prune_stats) < goal_lexicon:
+                _logger.info('already below goal')
+                return [], True
             prune_stats.sort(key=lambda x: (x.decision, -x.threshold_alpha))
             optimal_alpha = prune_stats[-int(goal_lexicon)].threshold_alpha
             if optimal_alpha == -math.inf:
