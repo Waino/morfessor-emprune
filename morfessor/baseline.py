@@ -1073,6 +1073,7 @@ class BaselineModel(object):
                 sample = t - 1
                 if sample <= 0:
                     sample = None
+                path_cost += badlikelihood
             else:
                 idx, sample = categorical(pts, probs)
                 path_cost += local_costs[idx]
