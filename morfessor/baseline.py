@@ -1024,6 +1024,8 @@ class BaselineModel(object):
             if len(negcosts) == 0:
                 grid[t] = (extrabad, None)
                 continue
+            # to compute sum (superposition) of path probabilities
+            # in log space, use logsumexp
             totcost = -logsumexp(negcosts)
             grid[t] = (totcost, None)
 
@@ -1031,26 +1033,33 @@ class BaselineModel(object):
         splitlocs = []
         t = 'stop'
         totcost = grid['stop'][0]
+        path_cost = 0
         while t is not None:
             pts = []
             probs = []
-            t = None if t == 'stop' else t
-            for pt in tail(maxlen, itertools.chain(['start'], self.cc.split_locations(compound, stop=t))):
+            local_costs = []
+            nt = None if t == 'stop' else t
+            for pt in tail(maxlen,
+                           itertools.chain(['start'], self.cc.split_locations(compound, stop=nt))):
                 if grid[pt][0] is None:
                     continue
                 cost = grid[pt][0]
                 # cc.slice requires None for endpoints
                 pt = None if pt == 'start' else pt
-                construction = self.cc.slice(compound, pt, t)
+                construction = self.cc.slice(compound, pt, nt)
                 if construction in taboo:
                     continue
                 count = self.get_construction_count(construction)
                 if count > 0:
-                    cost += theta * (logtokens - math.log(count) - totcost)
+                    #cost += theta * (logtokens - math.log(count) - totcost)
+                    local_cost = logtokens - (theta * math.log(count))
+                    cost += local_cost - totcost
                 elif self.cc.is_atom(construction):
                     cost += badlikelihood
+                    local_cost = badlikelihood
                 else:
                     continue
+                local_costs.append(local_cost)
                 pts.append(pt)
                 if cost < 0:
                     # FIXME: bug or imprecision?
@@ -1058,21 +1067,22 @@ class BaselineModel(object):
                 else:
                     probs.append(math.exp(-cost))
             if sum(probs) < EPS:
-                # if noting is valid, letterize
-                if t is None:
+                # if nothing is valid, letterize
+                if t == 'stop':
                     t = len(compound)
                 sample = t - 1
                 if sample <= 0:
                     sample = None
             else:
-                sample = categorical(pts, probs)
+                idx, sample = categorical(pts, probs)
+                path_cost += local_costs[idx]
             if sample is not None:
                 splitlocs.append(sample)
             t = sample
 
         constructions = list(self.cc.splitn(compound, list(reversed(splitlocs))))
 
-        return constructions, cost
+        return constructions, path_cost
 
     def forward_backward(self, compound, freq, maxlen=30):
         grid_alpha = {'start': (0.0, None)}
@@ -1201,7 +1211,7 @@ class BaselineModel(object):
                  math.log(self._corpus_coding.boundaries))
         return cost
 
-    def viterbi_nbest(self, compound, n, addcount=1.0, theta=1.0, maxlen=30,
+    def viterbi_nbest(self, compound, n, addcount=0.0, theta=1.0, maxlen=30,
                       allow_longer_unk_splits=False):
         """Find top-n optimal segmentations using the Viterbi algorithm.
 

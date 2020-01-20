@@ -833,7 +833,7 @@ class SampleCache(object):
         analyses, distr = self.cache[compound]
         if len(analyses) == 1:
             return analyses[0]
-        sample = utils.categorical(analyses, distr)
+        _, sample = utils.categorical(analyses, distr)
         return sample
 
 

@@ -35,7 +35,7 @@ def categorical(values, p):
     # np.random.choice doesn't accept multidimensional data
     indices = list(range(len(values)))
     idx = np.random.choice(indices, p=p)
-    return values[idx]
+    return idx, values[idx]
 
 
 # Progress bar for generators (length unknown):
