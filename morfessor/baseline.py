@@ -559,7 +559,7 @@ class BaselineModel(object):
             count = self.cost.counts[construction]
             self.cost.update(construction, -count)
             del self.cost.counts[construction]
-        self.first_prune = False
+        self._first_prune = False
         return self.get_cost(), done
 
     def compute_prune_stats(self):
@@ -680,7 +680,7 @@ class BaselineModel(object):
 
             # continue with pruning
             n_tot = len(prune_stats)
-            prop = first_prune_proportion if self.first_prune else proportion
+            prop = first_prune_proportion if self._first_prune else proportion
             max_prune_prop = int(math.ceil(n_tot * prop))
             max_prune_goal = max(0, int(n_tot - goal_lexicon))
             max_prune = min(max_prune_prop, max_prune_goal)
