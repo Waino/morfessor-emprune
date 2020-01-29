@@ -430,6 +430,20 @@ def configure_logger(logger, args):
         logger.addHandler(handler)
 
 
+def adjust_first_prune(start, prune_proportion, eps, goal):
+    keep_proportion = 1.0 - prune_proportion
+    if start * (keep_proportion ** eps) <= goal:
+        print('prune prop ok')
+        return prune_proportion
+    after_first = goal / (keep_proportion ** (eps - 1))
+    first_prune = 1.0 - (after_first / start)
+    _logger.warning(
+          'Goal {} would not be reachable within {} eps. '
+          'Increasing prune proportion of first epoch to {}'.format(
+          goal, eps, first_prune))
+    return first_prune
+
+
 def main(args):
 
     if (args.loadfile is None and
@@ -593,6 +607,8 @@ def main(args):
                 raise Exception('--no-lexicon-cost requires --prune-criterion lexicon')
             _logger.info("Batch training with em+prune algorithm, criterion: %s",
                 args.prune_criterion)
+            print('print', args.prune_criterion)
+            _logger.info('logger {}'.format(args.prune_criterion))
             c = model.load_data(data)
             if args.prune_criterion == 'lexicon':
                 if args.morphtypes is None:
@@ -606,9 +622,15 @@ def main(args):
             elif args.prune_criterion == 'autotune':
                 if args.morphtypes is None:
                     raise Exception('Must specify --num-morph-types')
+                initial_lexicon = len(model.cost.counts)
+                print(initial_lexicon, args.prune_proportion, args.maxepochs, args.morphtypes)
+                first_prune_proportion = adjust_first_prune(
+                    initial_lexicon, args.prune_proportion, args.maxepochs, args.morphtypes)
+                print('returned', first_prune_proportion)
                 prune_criterion = model.prune_criterion_autotune(
                     proportion=args.prune_proportion,
-                    goal_lexicon=args.morphtypes)
+                    goal_lexicon=args.morphtypes,
+                    first_prune_proportion=first_prune_proportion)
                 model.em_autotune_alpha = True
             if args.maxepochs is None:
                 # em-prune needs maxepochs to be set

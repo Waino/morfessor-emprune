@@ -111,6 +111,7 @@ class BaselineModel(object):
             self.cost = EmCost(self.cc, corpusweight, nolexcost, freq_distr)
             self.cost.load_lexicon(em_substr)
             self.em_autotune_alpha = False  # overridden later
+            self._first_prune = True
         else:
             self.cost = Cost(self.cc, corpusweight)
 
@@ -558,6 +559,7 @@ class BaselineModel(object):
             count = self.cost.counts[construction]
             self.cost.update(construction, -count)
             del self.cost.counts[construction]
+        self.first_prune = False
         return self.get_cost(), done
 
     def compute_prune_stats(self):
@@ -657,8 +659,10 @@ class BaselineModel(object):
             return pruned, True
         return prune_criterion
 
-    def prune_criterion_autotune(self, proportion, goal_lexicon):
+    def prune_criterion_autotune(self, proportion, goal_lexicon, first_prune_proportion=None):
         # determine optimal alpha. prune at most proportion. prune based on decision
+        if first_prune_proportion is None:
+            first_prune_proportion = proportion
         def prune_criterion(prune_stats):
             # determine optimal alpha
             if len(prune_stats) < goal_lexicon:
@@ -676,7 +680,8 @@ class BaselineModel(object):
 
             # continue with pruning
             n_tot = len(prune_stats)
-            max_prune_prop = int(math.ceil(n_tot * proportion))
+            prop = first_prune_proportion if self.first_prune else proportion
+            max_prune_prop = int(math.ceil(n_tot * prop))
             max_prune_goal = max(0, int(n_tot - goal_lexicon))
             max_prune = min(max_prune_prop, max_prune_goal)
             # done unless epoch quota was the stopping reason
