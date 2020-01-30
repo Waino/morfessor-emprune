@@ -607,6 +607,9 @@ def main(args):
             _logger.info("Batch training with em+prune algorithm, criterion: %s",
                 args.prune_criterion)
             c = model.load_data(data)
+            if args.maxepochs is None:
+                # em-prune needs maxepochs to be set
+                args.maxepochs = 15
             if args.prune_criterion == 'lexicon':
                 if args.morphtypes is None:
                     raise Exception('Must specify --num-morph-types')
@@ -627,9 +630,6 @@ def main(args):
                     goal_lexicon=args.morphtypes,
                     first_prune_proportion=first_prune_proportion)
                 model.em_autotune_alpha = True
-            if args.maxepochs is None:
-                # em-prune needs maxepochs to be set
-                args.maxepochs = 15
             e, c = model.train_em_prune(
                 prune_criterion,
                 max_epochs=args.maxepochs,
