@@ -430,17 +430,18 @@ def configure_logger(logger, args):
         logger.addHandler(handler)
 
 
-def adjust_first_prune(start, prune_proportion, eps, goal):
+def adjust_prune(start, prune_proportion, eps, goal):
     keep_proportion = 1.0 - prune_proportion
     if start * (keep_proportion ** eps) <= goal:
         return prune_proportion
-    after_first = goal / (keep_proportion ** (eps - 1))
-    first_prune = 1.0 - (after_first / start)
+    new_keep = (goal / start) ** (1/eps)
+    new_prune = 1 - new_keep
+    new_prune = min(new_prune, 0.9)
     _logger.warning(
           'Goal {} would not be reachable within {} eps. '
-          'Increasing prune proportion of first epoch to {}'.format(
-          goal, eps, first_prune))
-    return first_prune
+          'Increasing prune proportion to {}'.format(
+          goal, eps, new_prune))
+    return new_prune
 
 
 def main(args):
@@ -623,12 +624,11 @@ def main(args):
                 if args.morphtypes is None:
                     raise Exception('Must specify --num-morph-types')
                 initial_lexicon = len(model.cost.counts)
-                first_prune_proportion = adjust_first_prune(
+                prune_proportion = adjust_prune(
                     initial_lexicon, args.prune_proportion, args.maxepochs, args.morphtypes)
                 prune_criterion = model.prune_criterion_autotune(
-                    proportion=args.prune_proportion,
-                    goal_lexicon=args.morphtypes,
-                    first_prune_proportion=first_prune_proportion)
+                    proportion=prune_proportion,
+                    goal_lexicon=args.morphtypes)
                 model.em_autotune_alpha = True
             e, c = model.train_em_prune(
                 prune_criterion,

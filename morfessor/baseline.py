@@ -674,6 +674,10 @@ class BaselineModel(object):
                 _logger.info('cannot reach goal lexicon by tuning: too many always keep')
                 optimal_alpha = min(x.threshold_alpha for x in prune_stats
                                     if x.decision in (PRUNE_GAIN, PRUNE_LOSS))
+            if optimal_alpha == math.inf:
+                _logger.info('cannot reach goal lexicon by tuning: infinite alpha')
+                optimal_alpha = max(x.threshold_alpha for x in prune_stats
+                                    if x.decision in (PRUNE_GAIN, PRUNE_LOSS))
             _logger.info("Corpus weight set to {}".format(optimal_alpha))
             self.set_corpus_coding_weight(optimal_alpha)
             prune_stats = list(self.reweight_prune_stats(prune_stats, optimal_alpha))
@@ -692,7 +696,7 @@ class BaselineModel(object):
                 if i >= max_prune:
                     return pruned, done
                 if stat.decision >= PRUNE_LOSS:
-                    return pruned, True
+                    return pruned, done
                 pruned.append(stat.construction)
             # pruned everything
             _logger.info('pruned everything!')
@@ -1093,7 +1097,7 @@ class BaselineModel(object):
     def forward_backward(self, compound, freq, maxlen=30):
         grid_alpha = {'start': (0.0, None)}
         grid_beta = {'stop': (0.0, None)}
-        tokens = self.cost.tokens()
+        tokens = self.cost.all_tokens()
         logtokens = math.log(tokens) if tokens > 0 else 0
 
         local_morph_costs = {}
