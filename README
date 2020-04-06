@@ -22,20 +22,6 @@ to build the documentation can be found in docs/README.
 
 The documentation is also available on-line at http://morfessor.readthedocs.org/
 
-Details of the implemented algorithms and methods and a set of
-experiments are described in the following technical report:
-
-Sami Virpioja, Peter Smit, Stig-Arne Grönroos, and Mikko
-Kurimo. Morfessor 2.0: Python Implementation and Extensions for
-Morfessor Baseline. Aalto University publication series SCIENCE +
-TECHNOLOGY, 25/2013. Aalto University, Helsinki, 2013. ISBN
-978-952-60-5501-5.
-
-The report is available online at 
-
-http://urn.fi/URN:ISBN:978-952-60-5501-5
-
-
 Morfessor EM+Prune
 ------------------
 
@@ -145,3 +131,44 @@ Contact
 -------
 
 Questions or feedback? Email: morpho@aalto.fi
+
+
+Citing
+------
+
+If you use the Morfessor EM+Prune training algorithm, please cite
+
+@inproceedings{gronroos2020morfessor,
+    title={Morfessor {EM+Prune}: Improved Subword Segmentation with Expectation Maximization and Pruning},
+    author = {Gr{\"o}nroos, Stig-Arne and Sami Virpioja and Mikko Kurimo},
+    year = {2020},
+    month = {may},
+    address = {Marseilles, France},
+    booktitle = {Proceedings of the 12th Language Resources and Evaluation Conference},
+    publisher = {ELRA},
+}
+
+ArXiv preprint available online at
+
+https://arxiv.org/abs/2003.03131
+
+
+For the original Morfessor 2.0: Python implementation, please cite
+
+@techreport{virpioja2013morfessor,
+    address = {Helsinki, Finland},
+    type = {Report},
+    title = {Morfessor 2.0: Python Implementation and Extensions for Morfessor Baseline},
+    language = {eng},
+    number = {25/2013 in Aalto University publication series SCIENCE + TECHNOLOGY},
+    institution = {Department of Signal Processing and Acoustics, Aalto University},
+    author = {Virpioja, Sami and Smit, Peter and Grönroos, Stig-Arne and Kurimo, Mikko},
+    year = {2013},
+    pages = {38}
+}
+
+The report is available online at 
+
+http://urn.fi/URN:ISBN:978-952-60-5501-5
+
+
