@@ -127,6 +127,17 @@ Additional options for segmentation ::
     --sampling-temperature 0.5
         (Inverted) temperature parameter for sampling. (1.0 = unsmoothed)
 
+A note on pretokenization and boundary markers ::
+
+Morfessor EM+Prune is typically used with *word* boundary markers (marks where the whitespace should go), rather than the *morph*       boundary markers (marks word-internal boundaries) used by previous Morfessors.
+Make sure that the word boundary markers are present in the corpus / word count lists used for Morfessor EM+Prune training, and also in
+the input to Morfessor EM+Prune during segmentation.
+Some ways to achieve this is to use the pyonmttok library with spacer_annotate=True and joiner_annotate=False,
+or the dynamicdata dataloader with pretokenize=True.
+This will insert '▁' (unicode lower one eight block \u2581) as word boundary markers.
+Also remember to adjust your detokenization post-processing script appropriately.
+
+
 Contact
 -------
 
